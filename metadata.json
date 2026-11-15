@@ -1,0 +1,6 @@
+{
+  "name": "Hi Rider 4x4 World",
+  "description": "Automotive workshop management system for vehicle registration, job cards, employee department progress tracking, and parts requisitions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
