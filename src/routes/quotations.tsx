@@ -5,7 +5,7 @@ export const Route = createFileRoute("/quotations")({
   head: () =>
     workshopHead(
       "Quotation Management",
-      "Repair quotations and customer authorizations for Hi Rider 4x4 World.",
+      "Repair quotations and customer authorizations.",
     ),
   component: () => <RecordsPage kind="quotations" />,
 });

@@ -136,13 +136,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="brand">
           <img
             src="/hirider-logo-official.jpeg"
-            alt="Hi Rider 4x4 World Logo"
+            alt="Workshop Logo"
             className="brand-logo"
           />
-          <div className="brand-text">
-            <div className="brand-name">Hi Rider 4x4 World</div>
-            <div className="brand-subtitle">VEHICLE GARAGE MANAGEMENT</div>
-          </div>
         </div>
         <div className="sidebar-dashboard-wrap">
           <Link
@@ -197,7 +193,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <img
               className="topbar-logo"
               src="/hirider-logo-official.jpeg"
-              alt="Hi Rider 4x4 World"
+              alt="Workshop Logo"
             />
             <span className="topbar-divider" />
             <h1 className="topbar-page-title">{pageTitle}</h1>
@@ -262,7 +258,6 @@ export function AppShell({ children }: { children: ReactNode }) {
               title="Notifications"
             >
               <Bell size={19} />
-              <span className="topbar-notification-badge" />
             </button>
             <button
               type="button"

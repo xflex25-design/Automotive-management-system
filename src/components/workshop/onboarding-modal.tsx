@@ -131,7 +131,7 @@ export function OnboardingModal() {
             <Wrench size={24} />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-foreground">Welcome to Hi Rider Workshop</h2>
+            <h2 className="text-lg font-semibold text-foreground">Welcome to the Workshop</h2>
             <p className="text-sm text-muted-foreground">
               Select your dashboard to configure your workspace view
             </p>

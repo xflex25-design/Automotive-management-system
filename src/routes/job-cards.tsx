@@ -5,7 +5,7 @@ export const Route = createFileRoute("/job-cards")({
   head: () =>
     workshopHead(
       "Job Card Management",
-      "Workshop job cards, departmental assignments and repair instructions at Hi Rider 4x4 World.",
+      "Workshop job cards, departmental assignments and repair instructions.",
     ),
   component: () => <RecordsPage kind="jobs" />,
 });

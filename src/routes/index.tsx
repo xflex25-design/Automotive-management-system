@@ -8,7 +8,7 @@ export const Route = createFileRoute("/")({
   head: () =>
     workshopHead(
       "Foreman Dashboard",
-      "Hi Rider 4x4 World foreman workspace for vehicle intake, job cards, parts requisitions and inspections.",
+      "Foreman workspace for vehicle intake, job cards, parts requisitions, and inspections.",
     ),
   component: Index,
 });

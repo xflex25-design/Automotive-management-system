@@ -4,10 +4,7 @@ import { workshopHead } from "@/lib/route-head";
 
 export const Route = createFileRoute("/profile")({
   head: () =>
-    workshopHead(
-      "User Profile & Settings",
-      "Manage user details, password security, and display preferences at Hi Rider 4x4 World.",
-    ),
+    workshopHead("Profile Settings", "Manage user details, password security, and display preferences."),
   component: ProfilePage,
 });
 

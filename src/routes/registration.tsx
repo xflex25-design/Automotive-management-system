@@ -5,7 +5,7 @@ export const Route = createFileRoute("/registration")({
   head: () =>
     workshopHead(
       "Vehicle Registration",
-      "Customer details, vehicle intake, existing damage and intake photographs at Hi Rider 4x4 World.",
+      "Customer details, vehicle intake, existing damage and intake photographs.",
     ),
   component: IntakePage,
 });

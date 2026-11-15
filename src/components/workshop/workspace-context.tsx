@@ -13,12 +13,6 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { loginWithBackend, registerWithBackend, type AuthenticatedUser } from "@/lib/auth";
 import {
-  sampleVehicles,
-  sampleQuotations,
-  sampleInventory,
-  sampleJobs,
-  sampleRequisitions,
-  sampleInspections,
   type WorkspaceRole,
   type Vehicle,
   type Quotation,
@@ -103,8 +97,8 @@ function useWorkspaceState() {
   const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(() => {
     if (inTests) {
       return {
-        email: "foreman@hirider.com",
-        displayName: "Foreman 01",
+        email: "",
+        displayName: "Workshop User",
         authorities: ["ROLE_FOREMAN"],
         role: "Foreman",
       };
@@ -113,6 +107,19 @@ function useWorkspaceState() {
   });
 
   const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (inTests || typeof window === "undefined" || !window.localStorage) return;
+
+    [
+      "hi_rider_vehicles",
+      "hi_rider_quotations",
+      "hi_rider_inventory",
+      "hi_rider_jobs",
+      "hi_rider_requisitions",
+      "hi_rider_inspections",
+    ].forEach((key) => localStorage.removeItem(key));
+  }, []);
 
   const login = async (email: string, pass: string) => {
     const result = await loginWithBackend(email, pass);
@@ -175,20 +182,20 @@ function useWorkspaceState() {
   }, []);
 
   const [search, setSearch] = useState("");
-  const [vehicles, rawSetVehicles, vehiclesRef] = useCollection("vehicles", sampleVehicles);
+  const [vehicles, rawSetVehicles, vehiclesRef] = useCollection("vehicles", [] as Vehicle[]);
   const [quotations, rawSetQuotations, quotationsRef] = useCollection(
     "quotations",
-    sampleQuotations,
+    [] as Quotation[],
   );
-  const [inventory, rawSetInventory] = useCollection("inventory", sampleInventory);
-  const [jobs, rawSetJobs, jobsRef] = useCollection("jobs", sampleJobs);
+  const [inventory, rawSetInventory] = useCollection("inventory", [] as InventoryCard[]);
+  const [jobs, rawSetJobs, jobsRef] = useCollection("jobs", [] as JobCard[]);
   const [requisitions, rawSetRequisitions, requisitionsRef] = useCollection(
     "requisitions",
-    sampleRequisitions,
+    [] as Requisition[],
   );
   const [inspections, rawSetInspections, inspectionsRef] = useCollection(
     "inspections",
-    sampleInspections,
+    [] as Inspection[],
   );
   const [parts, setParts] = useState<CatalogPart[]>([]);
   const [workflows, setWorkflows] = useState<Record<string, unknown>[]>([]);
@@ -206,27 +213,7 @@ function useWorkspaceState() {
     enabled: !inTests && !!import.meta.env["VITE_COMPANY_ID"],
     retry: 1,
   });
-  const [activities, setActivities] = useState(() =>
-    inTests
-      ? [
-          {
-            text: "Rear shock absorbers requested for Isuzu D-Max",
-            detail: "Foreman 01 · PR-0451",
-            time: "10:42",
-          },
-          {
-            text: "Toyota Land Cruiser passed final inspection",
-            detail: "Foreman 03 · IN-0212",
-            time: "10:15",
-          },
-          {
-            text: "Ford Ranger quotation sent to customer",
-            detail: "Foreman 02 · QT-1023",
-            time: "09:36",
-          },
-        ]
-      : [],
-  );
+  const [activities, setActivities] = useState(() => (inTests ? [] : []));
   const [links, setLinks] = useState<Links>({});
   const linkRef = useRef(links);
   const [loading, setLoading] = useState(!inTests && !!import.meta.env["VITE_COMPANY_ID"]);

@@ -5,7 +5,7 @@ export const Route = createFileRoute("/management")({
   head: () =>
     workshopHead(
       "Management Dashboard",
-      "Workshop operations, vehicle workflow, departments, delays and release oversight for Hi Rider 4x4 World.",
+      "Workshop operations, vehicle workflow, departments, delays and release oversight.",
     ),
   component: () => <Dashboard role="Management" />,
 });

@@ -5,7 +5,7 @@ export const Route = createFileRoute("/employee")({
   head: () =>
     workshopHead(
       "Employee Dashboard",
-      "Department employee portal for tracking task progress and requisitions at Hi Rider 4x4 World.",
+      "Department employee portal for tracking task progress and requisitions.",
     ),
   component: EmployeeDashboard,
 });

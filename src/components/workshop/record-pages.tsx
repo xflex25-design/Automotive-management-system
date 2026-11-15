@@ -2080,7 +2080,8 @@ function CreateRecord({
           kind === "quotations"
             ? "modal-scroll max-w-6xl sm:max-w-6xl"
             : kind === "jobs"
-              ? "modal-scroll max-w-2xl sm:max-w-2xl"
+              ? "
+"
               : "modal-scroll"
         }
       >
@@ -2294,9 +2295,7 @@ function CreateRecord({
                       </TableHead>
                       <TableHead
                         sortDirection={lineSort?.key === "description" ? lineSort.direction : null}
-                        onSort={() =>
-                          setLineSort((current) => nextSortState(current, "description"))
-                        }
+                        onSort={() => setLineSort((current) => nextSortState(current, "description"))}
                       >
                         Description
                       </TableHead>
@@ -3121,124 +3120,6 @@ function InspectionDetail({
                 Complete inspection
               </Button>
             </div>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-export function RequestDetail({
-  request,
-  onClose,
-  allowDecision,
-}: {
-  request: Requisition | null;
-  onClose: () => void;
-  allowDecision: boolean;
-}) {
-  const w = useWorkspace();
-  const [rejection, setRejection] = useState(false);
-  const [note, setNote] = useState("");
-  const current = w.requisitions.find((r) => r.id === request?.id);
-  function decide(status: "Approved" | "Rejected") {
-    if (!current || !canDecideParts(w.role)) return;
-    if (status === "Rejected" && !note.trim()) {
-      toast.error("Please record the reason for rejection.");
-      return;
-    }
-
-    const decisionNote = status === "Rejected" ? note.trim() : "Approved after review.";
-    w.setRequisitions((prev) =>
-      prev.map((item) =>
-        item.id === current.id
-          ? {
-              ...item,
-              status,
-              decisionNote: decisionNote || item.decisionNote,
-            }
-          : item,
-      ),
-    );
-    w.addActivity(
-      `Parts request ${status.toLowerCase()} by ${w.role}`,
-      `${current.id} · ${current.part}`,
-    );
-    toast.success(`Request ${current.id} ${status.toLowerCase()}d.`);
-    setRejection(false);
-    setNote("");
-    onClose();
-  }
-  return (
-    <Dialog
-      open={!!current}
-      onOpenChange={(o) => {
-        if (!o) {
-          setRejection(false);
-          setNote("");
-          onClose();
-        }
-      }}
-    >
-      <DialogContent className="modal-scroll">
-        <DialogHeader>
-          <DialogTitle>Parts request · {current?.id}</DialogTitle>
-          <DialogDescription>Submitted {current?.date}</DialogDescription>
-        </DialogHeader>
-        {current && (
-          <>
-            <VehicleCell vehicle={w.vehicleFor(current.vehicleId)} />
-            <dl className="detail-grid">
-              <div>
-                <dt>Part / item</dt>
-                <dd>{current.part}</dd>
-              </div>
-              <div>
-                <dt>Requested quantity</dt>
-                <dd>{current.quantity}</dd>
-              </div>
-            </dl>
-            <div className="detail-notes">
-              <strong>Reason for requesting parts</strong>
-              <p className="mt-2">{current.reason}</p>
-            </div>
-            <Status>{current.status}</Status>
-            {current.decisionNote && (
-              <p className="text-xs font-medium text-muted-foreground">
-                Director note: {current.decisionNote}
-              </p>
-            )}
-            {allowDecision && current.status === "Pending" && canDecideParts(w.role) && (
-              <>
-                {rejection && (
-                  <div className="registration-row-compact registration-row-top">
-                    <label htmlFor="req-reject-note" className="registration-label">
-                      Rejection Reason <span className="registration-required">*</span>
-                    </label>
-                    <Textarea
-                      id="req-reject-note"
-                      className="registration-textarea"
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                      placeholder="Explain why this request is being rejected"
-                    />
-                  </div>
-                )}
-                <div className="registration-actions-flush">
-                  <Button onClick={() => decide("Approved")} className="approval-primary-btn">
-                    <Check />
-                    Approve request
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="approval-secondary-btn"
-                    onClick={() => (rejection ? decide("Rejected") : setRejection(true))}
-                  >
-                    {rejection ? "Confirm rejection" : "Reject request"}
-                  </Button>
-                </div>
-              </>
-            )}
           </>
         )}
       </DialogContent>

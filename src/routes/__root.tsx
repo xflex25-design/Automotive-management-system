@@ -90,12 +90,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Hi Rider 4x4 World | Workshop Management" },
+      { title: "Workshop Management" },
       {
         name: "description",
-        content: "Hi Rider 4x4 World vehicle garage and workshop management.",
+        content: "Vehicle garage and workshop management.",
       },
-      { property: "og:title", content: "Hi Rider 4x4 World" },
+      { property: "og:title", content: "Workshop Management" },
       { property: "og:description", content: "Vehicle garage and workshop management." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

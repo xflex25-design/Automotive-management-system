@@ -5,7 +5,7 @@ export const Route = createFileRoute("/workshop")({
   head: () =>
     workshopHead(
       "Workshop Progress",
-      "Department repair progress recorded and coordinated by Hi Rider 4x4 World foremen.",
+      "Department repair progress recorded and coordinated by foremen.",
     ),
   component: WorkshopPage,
 });

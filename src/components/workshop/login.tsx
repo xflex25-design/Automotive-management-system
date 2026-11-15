@@ -59,15 +59,15 @@ export function Login() {
             <div className="flex flex-col items-center text-center gap-2.5">
               <img
                 src="/hirider-logo-official.jpeg"
-                alt="Hi Rider 4x4 World Logo"
+                alt="Workshop Logo"
                 className="h-14 w-auto object-contain rounded-lg shadow-sm"
               />
               <div>
                 <h1 className="text-xl font-semibold text-slate-900 tracking-tight">
-                  Hi Rider 4x4 World
+                  Workshop Management
                 </h1>
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-label mt-0.5">
-                  Vehicle Garage Management
+                  Vehicle Operations
                 </p>
               </div>
             </div>

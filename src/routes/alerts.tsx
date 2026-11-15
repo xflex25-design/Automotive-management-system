@@ -5,7 +5,7 @@ export const Route = createFileRoute("/alerts")({
   head: () =>
     workshopHead(
       "Operational Alerts",
-      "Pending authorizations, delayed vehicles and release priorities at Hi Rider 4x4 World.",
+      "Pending authorizations, delayed vehicles and release priorities.",
     ),
   component: AlertsPage,
 });

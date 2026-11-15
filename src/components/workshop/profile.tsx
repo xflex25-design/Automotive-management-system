@@ -114,7 +114,7 @@ export function ProfileComponent() {
               </span>
             </div>
             <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-              <Mail size={14} /> {currentUser?.email || "user@hirider.com"}
+              <Mail size={14} /> {currentUser?.email}
             </p>
           </div>
         </div>
@@ -141,9 +141,7 @@ export function ProfileComponent() {
             <span className="text-muted-foreground uppercase tracking-label font-semibold">
               Workshop / Company
             </span>
-            <div className="font-medium text-foreground text-sm">
-              Hi Rider 4x4 World (Branch 01)
-            </div>
+            <div className="font-medium text-foreground text-sm">Your Company Name</div>
           </div>
         </div>
       </div>

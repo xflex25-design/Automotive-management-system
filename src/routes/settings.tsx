@@ -5,10 +5,7 @@ import { workshopHead } from "@/lib/route-head";
 
 export const Route = createFileRoute("/settings")({
   head: () =>
-    workshopHead(
-      "Account Settings",
-      "Account and view settings for the Hi Rider 4x4 World workshop.",
-    ),
+    workshopHead("Settings", "Account and view settings for the workshop."),
   component: SettingsPage,
 });
 

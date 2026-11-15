@@ -594,16 +594,6 @@
   background: var(--accent);
   color: var(--primary);
 }
-.topbar-notification-badge {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  width: 8px;
-  height: 8px;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  background: #ef4444;
-}
 .topbar-profile {
   position: relative;
 }
