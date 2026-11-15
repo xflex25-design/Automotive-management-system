@@ -42,7 +42,20 @@ type Links = Record<string, BackendRefs>;
 const inTests = import.meta.env.MODE === "test";
 
 function useCollection<T>(key: string, testSeed: T[]) {
-  const [items, setItems] = useState<T[]>(() => (inTests ? testSeed : []));
+  const [items, setItems] = useState<T[]>(() => {
+    if (inTests) return testSeed;
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        const saved = localStorage.getItem(`hi_rider_${key}`);
+        if (saved) {
+          return JSON.parse(saved) as T[];
+        }
+      }
+    } catch (err) {
+      console.warn(err);
+    }
+    return testSeed;
+  });
   const current = useRef(items);
 
   useEffect(() => {

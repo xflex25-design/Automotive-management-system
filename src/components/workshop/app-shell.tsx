@@ -180,16 +180,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
           ))}
         </nav>
-        <div className="sidebar-footer">
-          <a
-            href="/automotive-management-system-updated.zip?v=2"
-            download="automotive-management-system-updated.zip"
-            className="w-full flex items-center justify-center gap-2 rounded-lg bg-white hover:bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 transition cursor-pointer"
-          >
-            <Download size={15} />
-            Download Zip
-          </a>
-        </div>
       </aside>
       <div className="app-body">
         <header className="app-topbar">

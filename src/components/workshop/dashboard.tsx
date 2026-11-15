@@ -717,7 +717,7 @@ export function Dashboard({ role }: { role: WorkspaceRole }) {
                   <Status>{r.status}</Status>
                 </td>
                 <td>
-                  <Button asChild size="sm">
+                  <Button asChild size="sm" className="approval-primary-btn">
                     <Link to="/approvals">
                       Approve
                       <ArrowRight size={12} />

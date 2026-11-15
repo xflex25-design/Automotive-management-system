@@ -20,6 +20,7 @@ import { Route as InventoryRouteImport } from './routes/inventory'
 import { Route as JobCardsRouteImport } from './routes/job-cards'
 import { Route as ManagementRouteImport } from './routes/management'
 import { Route as ProcurementRouteImport } from './routes/procurement'
+import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as QuotationsRouteImport } from './routes/quotations'
 import { Route as RegistrationRouteImport } from './routes/registration'
 import { Route as ReportsRouteImport } from './routes/reports'
@@ -84,6 +85,11 @@ const ProcurementRoute = ProcurementRouteImport.update({
   path: '/procurement',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const QuotationsRoute = QuotationsRouteImport.update({
   id: '/quotations',
   path: '/quotations',
@@ -137,6 +143,7 @@ export interface FileRoutesByFullPath {
   '/job-cards': typeof JobCardsRoute
   '/management': typeof ManagementRoute
   '/procurement': typeof ProcurementRoute
+  '/profile': typeof ProfileRoute
   '/quotations': typeof QuotationsRoute
   '/registration': typeof RegistrationRoute
   '/reports': typeof ReportsRoute
@@ -158,6 +165,7 @@ export interface FileRoutesByTo {
   '/job-cards': typeof JobCardsRoute
   '/management': typeof ManagementRoute
   '/procurement': typeof ProcurementRoute
+  '/profile': typeof ProfileRoute
   '/quotations': typeof QuotationsRoute
   '/registration': typeof RegistrationRoute
   '/reports': typeof ReportsRoute
@@ -180,6 +188,7 @@ export interface FileRoutesById {
   '/job-cards': typeof JobCardsRoute
   '/management': typeof ManagementRoute
   '/procurement': typeof ProcurementRoute
+  '/profile': typeof ProfileRoute
   '/quotations': typeof QuotationsRoute
   '/registration': typeof RegistrationRoute
   '/reports': typeof ReportsRoute
@@ -203,6 +212,7 @@ export interface FileRouteTypes {
     | '/job-cards'
     | '/management'
     | '/procurement'
+    | '/profile'
     | '/quotations'
     | '/registration'
     | '/reports'
@@ -224,6 +234,7 @@ export interface FileRouteTypes {
     | '/job-cards'
     | '/management'
     | '/procurement'
+    | '/profile'
     | '/quotations'
     | '/registration'
     | '/reports'
@@ -245,6 +256,7 @@ export interface FileRouteTypes {
     | '/job-cards'
     | '/management'
     | '/procurement'
+    | '/profile'
     | '/quotations'
     | '/registration'
     | '/reports'
@@ -267,6 +279,7 @@ export interface RootRouteChildren {
   JobCardsRoute: typeof JobCardsRoute
   ManagementRoute: typeof ManagementRoute
   ProcurementRoute: typeof ProcurementRoute
+  ProfileRoute: typeof ProfileRoute
   QuotationsRoute: typeof QuotationsRoute
   RegistrationRoute: typeof RegistrationRoute
   ReportsRoute: typeof ReportsRoute
@@ -356,6 +369,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProcurementRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/quotations': {
       id: '/quotations'
       path: '/quotations'
@@ -427,6 +447,7 @@ const rootRouteChildren: RootRouteChildren = {
   JobCardsRoute: JobCardsRoute,
   ManagementRoute: ManagementRoute,
   ProcurementRoute: ProcurementRoute,
+  ProfileRoute: ProfileRoute,
   QuotationsRoute: QuotationsRoute,
   RegistrationRoute: RegistrationRoute,
   ReportsRoute: ReportsRoute,

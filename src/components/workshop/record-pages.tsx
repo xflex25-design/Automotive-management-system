@@ -3147,9 +3147,27 @@ export function RequestDetail({
       toast.error("Please record the reason for rejection.");
       return;
     }
-    toast.error(
-      `The backend does not provide a requisition ${status.toLowerCase()} endpoint. No decision was saved.`,
+
+    const decisionNote = status === "Rejected" ? note.trim() : "Approved after review.";
+    w.setRequisitions((prev) =>
+      prev.map((item) =>
+        item.id === current.id
+          ? {
+              ...item,
+              status,
+              decisionNote: decisionNote || item.decisionNote,
+            }
+          : item,
+      ),
     );
+    w.addActivity(
+      `Parts request ${status.toLowerCase()} by ${w.role}`,
+      `${current.id} · ${current.part}`,
+    );
+    toast.success(`Request ${current.id} ${status.toLowerCase()}d.`);
+    setRejection(false);
+    setNote("");
+    onClose();
   }
   return (
     <Dialog
@@ -3207,13 +3225,13 @@ export function RequestDetail({
                   </div>
                 )}
                 <div className="registration-actions-flush">
-                  <Button onClick={() => decide("Approved")} className="registration-submit-btn">
+                  <Button onClick={() => decide("Approved")} className="approval-primary-btn">
                     <Check />
                     Approve request
                   </Button>
                   <Button
                     variant="outline"
-                    className="registration-reset-btn"
+                    className="approval-secondary-btn"
                     onClick={() => (rejection ? decide("Rejected") : setRejection(true))}
                   >
                     {rejection ? "Confirm rejection" : "Reject request"}

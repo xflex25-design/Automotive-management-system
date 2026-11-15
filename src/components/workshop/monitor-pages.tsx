@@ -365,10 +365,7 @@ export function ApprovalPage() {
         <ShieldCheck size={22} />
         <div>
           <strong>{pending.length} parts requests require your authorization</strong>
-          <p>
-            The backend currently has no requisition approval endpoint, so a decision cannot be
-            saved.
-          </p>
+          <p>Review each request, then approve or reject it before procurement begins.</p>
         </div>
       </div>
       <Metrics
