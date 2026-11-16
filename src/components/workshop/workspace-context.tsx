@@ -213,7 +213,9 @@ function useWorkspaceState() {
     enabled: !inTests && !!import.meta.env["VITE_COMPANY_ID"],
     retry: 1,
   });
-  const [activities, setActivities] = useState(() => (inTests ? [] : []));
+  const [activities, setActivities] = useState<Array<{ text: string; detail: string; time: string }>>(
+    [],
+  );
   const [links, setLinks] = useState<Links>({});
   const linkRef = useRef(links);
   const [loading, setLoading] = useState(!inTests && !!import.meta.env["VITE_COMPANY_ID"]);

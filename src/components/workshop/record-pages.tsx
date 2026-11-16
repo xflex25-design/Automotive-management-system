@@ -229,6 +229,7 @@ import {
   type Quotation,
   type Vehicle,
   type Inspection,
+  type JobCard,
 } from "@/lib/workshop";
 
 type RecordKind = "quotations" | "inventory" | "jobs" | "requisitions" | "inspections";
@@ -1773,10 +1774,13 @@ function CreateRecord({
       const configuredEmployee = Number(import.meta.env["VITE_EMPLOYEE_ID"]);
       if (configuredEmployee > 0 && employees.some((e) => Number(e["id"]) === configuredEmployee)) {
         setJobPreparedByEmployeeId(String(configuredEmployee));
-      } else if (employees.length > 0) {
-        setJobPreparedByEmployeeId(String(employees[0]["id"] ?? ""));
       } else {
-        setJobPreparedByEmployeeId("foreman");
+        const firstEmployeeId = employees[0]?.["id"];
+        setJobPreparedByEmployeeId(
+          firstEmployeeId !== undefined && firstEmployeeId !== null
+            ? String(firstEmployeeId)
+            : "foreman",
+        );
       }
     }
   }, [open, kind, w.workflowOptions]);
@@ -1976,29 +1980,29 @@ function CreateRecord({
         ? String(selectedEmp["name"] ?? "")
         : jobPreparedByEmployeeId === "foreman"
           ? w.foreman
-          : undefined;
+          : "";
       const preparedByEmpId =
         selectedEmp && Number(selectedEmp["id"]) > 0
           ? Number(selectedEmp["id"])
           : Number(import.meta.env["VITE_EMPLOYEE_ID"]) || undefined;
       const newJobPhotos = jobPhotos.map((p) => p.url);
       const finalDepartment = jobDepartment || text("department") || "Mechanical";
+      const jobRemarksText = (text("remarks") || jobRemarks).trim();
 
-      w.setJobs((prev) => [
-        {
-          id,
-          vehicleId,
-          department: finalDepartment,
-          work: text("description"),
-          status: "Pending",
-          due: text("due") || jobDueDate || "To be confirmed",
-          remarks: (text("remarks") || jobRemarks).trim() || undefined,
-          preparedBy: preparedByName,
-          preparedByEmployeeId: preparedByEmpId,
-          photos: newJobPhotos.length > 0 ? newJobPhotos : undefined,
-        },
-        ...prev,
-      ]);
+      const newJob: JobCard = {
+        id,
+        vehicleId,
+        department: finalDepartment,
+        work: text("description"),
+        status: "Pending",
+        due: text("due") || jobDueDate || "To be confirmed",
+        remarks: jobRemarksText || "",
+        preparedBy: preparedByName || "",
+        ...(preparedByEmpId ? { preparedByEmployeeId: preparedByEmpId } : {}),
+        photos: newJobPhotos.length > 0 ? newJobPhotos : [],
+      };
+
+      w.setJobs((prev) => [newJob, ...prev]);
       w.setVehicles((prev) =>
         prev.map((item) =>
           item.id === vehicleId
@@ -2076,12 +2080,12 @@ function CreateRecord({
       }}
     >
       <DialogContent
+       
         className={
           kind === "quotations"
             ? "modal-scroll max-w-6xl sm:max-w-6xl"
             : kind === "jobs"
-              ? "
-"
+              ? "modal-scroll"
               : "modal-scroll"
         }
       >
@@ -3126,3 +3130,72 @@ function InspectionDetail({
     </Dialog>
   );
 }
+
+function RequestDetail({
+  request,
+  onClose,
+  allowDecision,
+}: {
+  request: Requisition | null;
+  onClose: () => void;
+  allowDecision: boolean;
+}) {
+  const w = useWorkspace();
+  const vehicle = request ? w.vehicleFor(request.vehicleId) : null;
+
+  if (!request) return null;
+
+  return (
+    <Dialog open={!!request} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="modal-scroll max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Request {request.id}</DialogTitle>
+          <DialogDescription>
+            {vehicle ? `${vehicle.make} · ${vehicle.plate}` : "Workshop requisition"}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 text-sm">
+          <div
+              <p>
+                <Status>{request.status}</Status>
+              </p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Department</span>
+              <p>{request.department}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Foreman</span>
+              <p>{request.foreman}</p>
+            </div>
+          </div>
+
+          <div>
+            <span className="text-muted-foreground">Reason</span>
+            <p className="rounded-md border bg-muted/20 p-3 leading-relaxed">{request.reason}</p>
+          </div>
+
+          {request.decisionNote && (
+            <div>
+              <span className="text-muted-foreground">Decision note</span>
+              <p className="rounded-md border bg-muted/20 p-3 leading-relaxed">
+                {request.decisionNote}
+              </p>
+            </div>
+          )}
+
+          {allowDecision && (
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="outline" onClick={onClose}>
+                Close
+              </Button>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export { RequestDetail };
