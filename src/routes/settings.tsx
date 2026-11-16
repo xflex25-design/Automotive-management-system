@@ -4,8 +4,7 @@ import { useWorkspace } from "@/components/workshop/workspace-context";
 import { workshopHead } from "@/lib/route-head";
 
 export const Route = createFileRoute("/settings")({
-  head: () =>
-    workshopHead("Settings", "Account and view settings for the workshop."),
+  head: () => workshopHead("Settings", "Account and view settings for the workshop."),
   component: SettingsPage,
 });
 

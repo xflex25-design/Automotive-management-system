@@ -21,6 +21,10 @@ import {
   filterJobCardAuditTrail,
   departmentStats,
   buildDepartmentOverview,
+  createJobCardStatusNotification,
+  dispatchBrowserNotification,
+  getNotificationAudience,
+  isRelevantNotification,
   type JobCard,
 } from "@/lib/workshop";
 import { toCreateJobCardRequest } from "@/lib/api";
@@ -231,10 +235,10 @@ describe("Garage staff and official workflow", () => {
       "Invoice and Vehicle Release",
     ]);
   });
-  it("allows only the Director to decide parts requests", () => {
+  it("allows Director and Management to decide parts requests", () => {
     expect(canDecideParts("Director")).toBe(true);
+    expect(canDecideParts("Management")).toBe(true);
     expect(canDecideParts("Foreman")).toBe(false);
-    expect(canDecideParts("Management")).toBe(false);
   });
   it("requires customer quotation approval before an inventory card", () => {
     expect(canCreateInventory("Approved")).toBe(true);
@@ -606,5 +610,96 @@ describe("Garage staff and official workflow", () => {
         efficiency: 0,
       },
     ]);
+  });
+
+  it("targets relevant employees and dispatches browser notifications on job card status changes", () => {
+    const job: JobCard = {
+      id: "JC-777",
+      vehicleId: "VR-1061",
+      department: "Mechanical",
+      work: "Replace timing belt",
+      status: "In Repair",
+      due: "2026-11-22",
+      assignedEmployee: "Peter Zulu",
+    };
+
+    // Moving from In Repair -> Completed alerts Mechanical team, Foreman, and Management
+    const audience = getNotificationAudience(job, "In Repair", "Completed");
+    expect(audience.targetRoles).toEqual(["Employee", "Foreman", "Management"]);
+    expect(audience.targetAudience).toContain("Mechanical team (Peter Zulu)");
+    expect(audience.targetAudience).toContain("Management");
+
+    // Same-status update returns null
+    expect(
+      createJobCardStatusNotification({
+        job,
+        previousStatus: "In Repair",
+        newStatus: "in repair",
+        actor: "Foreman 01",
+      }),
+    ).toBeNull();
+
+    const notif = createJobCardStatusNotification({
+      job: { ...job, status: "Completed" },
+      previousStatus: "In Repair",
+      newStatus: "Completed",
+      actor: "Peter Zulu",
+      vehicleLabel: "Toyota Hilux (BCA 4821)",
+      createdAtMs: 5000,
+      timestamp: "15 Nov 2026, 14:30",
+    });
+    expect(notif).not.toBeNull();
+    expect(notif?.title).toBe("Job Card JC-777 · In Repair → Completed");
+    expect(notif?.message).toContain("Toyota Hilux (BCA 4821)");
+    expect(notif?.message).toContain('moved from "In Repair" to "Completed"');
+
+    // Relevance check per role and department
+    expect(isRelevantNotification(notif!, { role: "Employee", department: "Mechanical" })).toBe(
+      true,
+    );
+    expect(isRelevantNotification(notif!, { role: "Employee", department: "Painting" })).toBe(
+      false,
+    );
+    expect(
+      isRelevantNotification(notif!, {
+        role: "Employee",
+        department: "Painting",
+        employeeName: "Peter Zulu",
+      }),
+    ).toBe(true);
+    expect(isRelevantNotification(notif!, { role: "Management" })).toBe(true);
+    expect(isRelevantNotification(notif!, { role: "Director" })).toBe(false);
+
+    // Dispatches native browser Notification when permission is granted
+    const spawned: Array<{ title: string; body?: string }> = [];
+    class FakeNotification {
+      static permission: NotificationPermission = "granted";
+      constructor(title: string, options?: NotificationOptions) {
+        spawned.push({ title, body: options?.body });
+      }
+    }
+    let fallbackCount = 0;
+    const sent = dispatchBrowserNotification(notif!, {
+      NotificationCtor: FakeNotification as unknown as typeof Notification,
+      onFallbackAlert: () => {
+        fallbackCount += 1;
+      },
+    });
+    expect(sent).toBe(true);
+    expect(spawned).toHaveLength(1);
+    expect(spawned[0]?.title).toBe("Job Card JC-777 · In Repair → Completed");
+    expect(fallbackCount).toBe(1);
+
+    // Skips native Notification when permission is denied, still runs fallback
+    FakeNotification.permission = "denied";
+    const sentWhenDenied = dispatchBrowserNotification(notif!, {
+      NotificationCtor: FakeNotification as unknown as typeof Notification,
+      onFallbackAlert: () => {
+        fallbackCount += 1;
+      },
+    });
+    expect(sentWhenDenied).toBe(false);
+    expect(spawned).toHaveLength(1);
+    expect(fallbackCount).toBe(2);
   });
 });

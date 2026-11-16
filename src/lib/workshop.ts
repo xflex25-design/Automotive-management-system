@@ -40,7 +40,7 @@ export const stageOwners = [
   "Management",
 ];
 export function canDecideParts(role: WorkspaceRole) {
-  return role === "Director";
+  return role === "Director" || role === "Management";
 }
 export function canAuthorizeRelease(role: WorkspaceRole) {
   return role === "Management";
@@ -114,9 +114,11 @@ export type InventoryCard = {
 };
 export const jobCardStatuses = [
   "Pending",
+  "In Repair",
   "In progress",
   "Awaiting parts",
   "Approved",
+  "Completed",
   "Complete",
   "Flagged",
   "Rework required",
@@ -742,7 +744,8 @@ export function buildDepartmentOverview(
     bucket.vehicles.add(job.vehicleId || job.id);
     const normalized = job.status.trim().toLowerCase();
     const isCompleted = normalized === "complete" || normalized === "completed";
-    const isActive = normalized === "in progress" || normalized === "approved";
+    const isActive =
+      normalized === "in progress" || normalized === "in repair" || normalized === "approved";
     if (isCompleted) {
       bucket.completed += 1;
     } else if (isActive) {
@@ -772,4 +775,170 @@ export function buildDepartmentOverview(
       delays: bucket.delays,
       efficiency: bucket.total ? Math.round((bucket.completed / bucket.total) * 100) : 0,
     }));
+}
+
+export type BrowserNotificationPermission = NotificationPermission | "unsupported";
+
+export type JobCardNotification = {
+  id: string;
+  jobId: string;
+  vehicleId: string;
+  vehicleLabel?: string;
+  department: string;
+  previousStatus: string;
+  newStatus: string;
+  title: string;
+  message: string;
+  actor: string;
+  targetAudience: string;
+  targetRoles: WorkspaceRole[];
+  assignedEmployee?: string;
+  timestamp: string;
+  createdAtMs: number;
+  read: boolean;
+};
+
+export function getBrowserNotificationPermission(): BrowserNotificationPermission {
+  if (typeof window === "undefined" || typeof Notification === "undefined") {
+    return "unsupported";
+  }
+  return Notification.permission;
+}
+
+export async function requestBrowserNotificationPermission(): Promise<BrowserNotificationPermission> {
+  if (typeof window === "undefined" || typeof Notification === "undefined") {
+    return "unsupported";
+  }
+  if (Notification.permission === "granted" || Notification.permission === "denied") {
+    return Notification.permission;
+  }
+  try {
+    return await Notification.requestPermission();
+  } catch {
+    return Notification.permission;
+  }
+}
+
+export function getNotificationAudience(
+  job: Pick<JobCard, "department" | "assignedEmployee">,
+  _previousStatus: string,
+  newStatus: string,
+): { targetRoles: WorkspaceRole[]; targetAudience: string } {
+  const normalized = newStatus.trim().toLowerCase();
+  const roles = new Set<WorkspaceRole>(["Employee", "Foreman"]);
+  if (
+    normalized === "complete" ||
+    normalized === "completed" ||
+    normalized === "approved" ||
+    normalized === "flagged" ||
+    normalized === "rework required"
+  ) {
+    roles.add("Management");
+  }
+  if (normalized === "awaiting parts" || normalized === "flagged") {
+    roles.add("Director");
+  }
+
+  const deptLabel = job.department?.trim() || "Workshop";
+  const empSuffix = job.assignedEmployee?.trim() ? ` (${job.assignedEmployee.trim()})` : "";
+  const extraRoles = Array.from(roles).filter((r) => r !== "Employee");
+  const targetAudience = [`${deptLabel} team${empSuffix}`, ...extraRoles].join(" · ");
+
+  return {
+    targetRoles: Array.from(roles),
+    targetAudience,
+  };
+}
+
+export function isRelevantNotification(
+  notification: JobCardNotification,
+  context: { role: WorkspaceRole; department?: string; employeeName?: string },
+): boolean {
+  if (!notification.targetRoles.includes(context.role)) {
+    return false;
+  }
+  if (context.role === "Employee") {
+    const dept = notification.department.trim().toLowerCase();
+    const userDept = (context.department ?? "").trim().toLowerCase();
+    const assigned = (notification.assignedEmployee ?? "").trim().toLowerCase();
+    const userName = (context.employeeName ?? "").trim().toLowerCase();
+    const sameDept = !dept || dept === "workshop" || (userDept !== "" && dept === userDept);
+    const sameAssignee = assigned !== "" && userName !== "" && assigned === userName;
+    return sameDept || sameAssignee;
+  }
+  return true;
+}
+
+export function createJobCardStatusNotification(input: {
+  job: JobCard;
+  previousStatus: string;
+  newStatus: string;
+  actor: string;
+  vehicleLabel?: string;
+  createdAtMs?: number;
+  timestamp?: string;
+}): JobCardNotification | null {
+  const prev = input.previousStatus.trim();
+  const next = input.newStatus.trim();
+  if (!next || prev.toLowerCase() === next.toLowerCase()) {
+    return null;
+  }
+
+  const createdAtMs = input.createdAtMs ?? Date.now();
+  const timestamp = input.timestamp ?? formatAuditTimestamp(new Date(createdAtMs));
+  const department = input.job.department?.trim() || "Workshop";
+  const { targetRoles, targetAudience } = getNotificationAudience(input.job, prev, next);
+  const vehiclePrefix = input.vehicleLabel ? `${input.vehicleLabel} · ` : "";
+  const assigneePart = input.job.assignedEmployee ? ` (${input.job.assignedEmployee})` : "";
+
+  return {
+    id: `notif-${input.job.id}-${createdAtMs}-${Math.random().toString(36).slice(2, 6)}`,
+    jobId: input.job.id,
+    vehicleId: input.job.vehicleId,
+    ...(input.vehicleLabel ? { vehicleLabel: input.vehicleLabel } : {}),
+    department,
+    previousStatus: prev || "Pending",
+    newStatus: next,
+    title: `Job Card ${input.job.id} · ${prev || "Pending"} → ${next}`,
+    message: `${vehiclePrefix}${department}${assigneePart} moved from "${prev || "Pending"}" to "${next}" by ${input.actor}.`,
+    actor: input.actor,
+    targetAudience,
+    targetRoles,
+    ...(input.job.assignedEmployee ? { assignedEmployee: input.job.assignedEmployee } : {}),
+    timestamp,
+    createdAtMs,
+    read: false,
+  };
+}
+
+export function dispatchBrowserNotification(
+  notification: JobCardNotification,
+  options?: {
+    NotificationCtor?: typeof Notification;
+    onDesktopSent?: () => void;
+    onFallbackAlert?: (notification: JobCardNotification) => void;
+  },
+): boolean {
+  const Ctor =
+    options?.NotificationCtor ??
+    (typeof window !== "undefined" && typeof Notification !== "undefined"
+      ? Notification
+      : undefined);
+
+  let sentDesktop = false;
+  if (Ctor && Ctor.permission === "granted") {
+    try {
+      new Ctor(notification.title, {
+        body: `${notification.message} Notifying: ${notification.targetAudience}`,
+        tag: `job-card-status-${notification.jobId}`,
+      });
+      sentDesktop = true;
+      options?.onDesktopSent?.();
+    } catch {
+      sentDesktop = false;
+    }
+  }
+
+  options?.onFallbackAlert?.(notification);
+  return sentDesktop;
 }

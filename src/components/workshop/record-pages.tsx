@@ -1758,6 +1758,45 @@ function CreateRecord({
     }
   }, [open, kind, w.workflowOptions]);
 
+  // Auto-save job card creation draft progress to localStorage
+  useEffect(() => {
+    if (!open || kind !== "jobs") return;
+    const draftData = {
+      vehicleId,
+      jobDepartment,
+      jobPreparedByEmployeeId,
+      jobDueDate,
+      jobRemarks,
+    };
+    try {
+      localStorage.setItem("workshop_job_card_draft", JSON.stringify(draftData));
+    } catch (e) {
+      console.error("Failed to save job card draft", e);
+    }
+  }, [open, kind, vehicleId, jobDepartment, jobPreparedByEmployeeId, jobDueDate, jobRemarks]);
+
+  // Restore job card draft when opening
+  useEffect(() => {
+    if (!open || kind !== "jobs") return;
+    try {
+      const saved = localStorage.getItem("workshop_job_card_draft");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") {
+          if (parsed.vehicleId) setVehicleId(parsed.vehicleId);
+          if (parsed.jobDepartment) setJobDepartment(parsed.jobDepartment);
+          if (parsed.jobPreparedByEmployeeId)
+            setJobPreparedByEmployeeId(parsed.jobPreparedByEmployeeId);
+          if (parsed.jobDueDate) setJobDueDate(parsed.jobDueDate);
+          if (parsed.jobRemarks) setJobRemarks(parsed.jobRemarks);
+          toast.info("Restored saved job card draft progress.");
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load job card draft", e);
+    }
+  }, [open, kind]);
+
   const handlePhotoFiles = (files: FileList | File[]) => {
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
@@ -1882,10 +1921,17 @@ function CreateRecord({
     }
     const f = new FormData(e.currentTarget);
     const text = (name: string) => String(f.get(name) ?? "");
-    if (kind === "requisitions" && !catalogPartId) {
+    if (kind === "requisitions" && w.parts.length > 0 && !catalogPartId) {
       toast.error("Select a catalog part.");
       return;
     }
+    const nextRecordId = (prefix: string, items: readonly { id: string }[], base: number) => {
+      const maxNum = items.reduce((max, item) => {
+        const match = item.id.match(new RegExp(`^${prefix}-(\\d+)$`));
+        return match ? Math.max(max, Number(match[1])) : max;
+      }, base - 1);
+      return `${prefix}-${maxNum + 1}`;
+    };
     let id = "";
     if (kind === "quotations") {
       if (hasPartialLine) {
@@ -1901,16 +1947,18 @@ function CreateRecord({
         toast.error("Add at least one quotation line item.");
         return;
       }
+      const backendActive = Boolean(import.meta.env["VITE_COMPANY_ID"]);
       if (
-        !Number.isSafeInteger(Number(import.meta.env["VITE_EMPLOYEE_ID"])) ||
-        Number(import.meta.env["VITE_EMPLOYEE_ID"]) <= 0
+        backendActive &&
+        (!Number.isSafeInteger(Number(import.meta.env["VITE_EMPLOYEE_ID"])) ||
+          Number(import.meta.env["VITE_EMPLOYEE_ID"]) <= 0)
       ) {
         toast.error(
           "Set VITE_EMPLOYEE_ID to an active workshop employee before creating a quotation.",
         );
         return;
       }
-      id = `NEW-${Date.now()}`;
+      id = `QT-${1001 + w.quotations.length}`;
       const items = normalizedLines.map((line) => ({
         itemType:
           line.item.trim().toLowerCase() === "labour" ? ("LABOUR" as const) : ("PART" as const),
@@ -1941,7 +1989,7 @@ function CreateRecord({
       w.updateVehicleStage(vehicleId, 1);
     }
     if (kind === "inventory") {
-      id = `IC-${452 + w.inventory.length - 3}`;
+      id = nextRecordId("IC", w.inventory, 450);
       w.setInventory((prev) => [
         { id, vehicleId, items: text("items"), condition: text("condition"), date: "11 Nov 2026" },
         ...prev,
@@ -1949,7 +1997,7 @@ function CreateRecord({
       w.updateVehicleStage(vehicleId, 4);
     }
     if (kind === "jobs") {
-      id = `JC-${882 + w.jobs.length - 5}`;
+      id = nextRecordId("JC", w.jobs, 880);
       const employees = Array.isArray(w.workflowOptions["employees"])
         ? (w.workflowOptions["employees"] as Record<string, unknown>[])
         : [];
@@ -2006,34 +2054,48 @@ function CreateRecord({
             : item,
         ),
       );
+      localStorage.removeItem("workshop_job_card_draft");
     }
     if (kind === "requisitions") {
-      id = `PR-${452 + w.requisitions.length - 6}`;
+      id = nextRecordId("PR", w.requisitions, 450);
+      const selectedPartName =
+        w.parts.find((part) => part.id === Number(catalogPartId))?.name ||
+        text("partName").trim() ||
+        "Workshop Part";
+      const parsedQty = Number(text("quantity"));
       w.setRequisitions((prev) => [
         {
           id,
           vehicleId,
-          part: w.parts.find((part) => part.id === Number(catalogPartId))?.name ?? "",
-          quantity: 1,
+          part: selectedPartName,
+          quantity: Number.isFinite(parsedQty) && parsedQty > 0 ? parsedQty : 1,
           department: "Workshop",
           reason: text("description"),
           amount: 0,
           foreman: w.foreman,
           status: "Pending",
-          date: "11 Nov 2026",
+          date: new Date().toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          }),
         },
         ...prev,
       ]);
       w.updateVehicleStage(vehicleId, 6);
     }
     if (kind === "inspections") {
-      id = `IN-${213 + w.inspections.length - 2}`;
+      id = nextRecordId("IN", w.inspections, 210);
       w.setInspections((prev) => [
         {
           id,
           vehicleId,
           foreman: w.foreman,
-          date: "11 Nov 2026",
+          date: new Date().toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          }),
           result: "Rework required",
           notes: text("description"),
         },
@@ -2528,6 +2590,7 @@ function CreateRecord({
               setJobDueDate("");
               setJobRemarks("");
               setJobPhotos([]);
+              localStorage.removeItem("workshop_job_card_draft");
               if (photoInputRef.current) photoInputRef.current.value = "";
             }}
           >
@@ -2777,6 +2840,35 @@ function CreateRecord({
                         </SelectContent>
                       </Select>
                     </div>
+                  )}
+                  {kind === "requisitions" && w.parts.length === 0 && (
+                    <>
+                      <div className="registration-row-compact">
+                        <label htmlFor="req-part-name" className="registration-label">
+                          Part / Item <span className="registration-required">*</span>
+                        </label>
+                        <Input
+                          id="req-part-name"
+                          name="partName"
+                          required
+                          placeholder="e.g. Front Brake Pads"
+                          className="registration-input"
+                        />
+                      </div>
+                      <div className="registration-row-compact">
+                        <label htmlFor="req-part-qty" className="registration-label">
+                          Quantity
+                        </label>
+                        <Input
+                          id="req-part-qty"
+                          name="quantity"
+                          type="number"
+                          min="1"
+                          defaultValue="1"
+                          className="registration-input"
+                        />
+                      </div>
+                    </>
                   )}
                   <div className="registration-row-compact registration-row-top">
                     <label htmlFor="record-desc" className="registration-label">
@@ -3150,8 +3242,33 @@ function RequestDetail({
 }) {
   const w = useWorkspace();
   const vehicle = request ? w.vehicleFor(request.vehicleId) : null;
+  const [decisionNote, setDecisionNote] = useState("");
+
+  useEffect(() => {
+    setDecisionNote("");
+  }, [request?.id]);
 
   if (!request) return null;
+
+  const handleDecision = (status: "Approved" | "Rejected") => {
+    w.setRequisitions((prev) =>
+      prev.map((r) =>
+        r.id === request.id
+          ? {
+              ...r,
+              status,
+              decisionNote: decisionNote.trim() || undefined,
+            }
+          : r,
+      ),
+    );
+    w.addActivity(
+      `Requisition ${request.id} ${status.toLowerCase()}`,
+      `${w.role} · ${request.part} (Qty ${request.quantity})`,
+    );
+    toast.success(`Parts request ${request.id} has been ${status.toLowerCase()}.`);
+    onClose();
+  };
 
   return (
     <Dialog open={!!request} onOpenChange={(open) => !open && onClose()}>
@@ -3181,9 +3298,24 @@ function RequestDetail({
         </div>
 
         <div>
-          <span className="text-muted-foreground">Reason</span>
+          <span className="text-muted-foreground">Reason / Description</span>
           <p className="rounded-md border bg-muted/20 p-3 leading-relaxed">{request.reason}</p>
         </div>
+
+        {allowDecision && request.status === "Pending" && (
+          <div className="space-y-2">
+            <label htmlFor="decision-note" className="text-xs font-medium text-foreground">
+              Decision Note / Comments
+            </label>
+            <Textarea
+              id="decision-note"
+              placeholder="Enter authorization comments or reason for approval/rejection..."
+              value={decisionNote}
+              onChange={(e) => setDecisionNote(e.target.value)}
+              className="registration-textarea min-h-[70px]"
+            />
+          </div>
+        )}
 
         {request.decisionNote && (
           <div>
@@ -3194,13 +3326,22 @@ function RequestDetail({
           </div>
         )}
 
-        {allowDecision && (
-          <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-2 pt-2">
+          {allowDecision && request.status === "Pending" ? (
+            <>
+              <Button size="sm" variant="destructive" onClick={() => handleDecision("Rejected")}>
+                Reject Request
+              </Button>
+              <Button size="sm" onClick={() => handleDecision("Approved")}>
+                Approve Request
+              </Button>
+            </>
+          ) : (
             <Button size="sm" variant="outline" onClick={onClose}>
               Close
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

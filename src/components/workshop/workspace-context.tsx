@@ -13,11 +13,18 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { loginWithBackend, registerWithBackend, type AuthenticatedUser } from "@/lib/auth";
 import {
+  createJobCardStatusNotification,
+  dispatchBrowserNotification,
+  getBrowserNotificationPermission,
+  isRelevantNotification,
+  requestBrowserNotificationPermission,
+  type BrowserNotificationPermission,
   type WorkspaceRole,
   type Vehicle,
   type Quotation,
   type InventoryCard,
   type JobCard,
+  type JobCardNotification,
   type Requisition,
   type Inspection,
   type CatalogPart,
@@ -34,6 +41,7 @@ import {
 
 type Links = Record<string, BackendRefs>;
 const inTests = import.meta.env.MODE === "test";
+const backendConfigured = !inTests && Boolean(import.meta.env["VITE_COMPANY_ID"]);
 
 function useCollection<T>(key: string, testSeed: T[]) {
   const [items, setItems] = useState<T[]>(() => {
@@ -88,9 +96,29 @@ function useCollection<T>(key: string, testSeed: T[]) {
 }
 
 function useWorkspaceState() {
-  const [role, setRole] = useState<WorkspaceRole>("Foreman");
+  const [role, setRoleState] = useState<WorkspaceRole>("Foreman");
   const [foreman, setForeman] = useState("Foreman 01");
-  const [employeeDepartment, setEmployeeDepartment] = useState("Mechanical");
+  const [employeeDepartment, setEmployeeDepartmentState] = useState("Mechanical");
+
+  const setRole: Dispatch<SetStateAction<WorkspaceRole>> = useCallback((action) => {
+    setRoleState((prev) => {
+      const next = typeof action === "function" ? action(prev) : action;
+      if (!inTests && typeof window !== "undefined" && window.localStorage) {
+        localStorage.setItem("hi_rider_role", next);
+      }
+      return next;
+    });
+  }, []);
+
+  const setEmployeeDepartment: Dispatch<SetStateAction<string>> = useCallback((action) => {
+    setEmployeeDepartmentState((prev) => {
+      const next = typeof action === "function" ? action(prev) : action;
+      if (!inTests && typeof window !== "undefined" && window.localStorage) {
+        localStorage.setItem("hi_rider_department", next);
+      }
+      return next;
+    });
+  }, []);
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(inTests);
 
@@ -107,19 +135,8 @@ function useWorkspaceState() {
   });
 
   const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
-
-  useEffect(() => {
-    if (inTests || typeof window === "undefined" || !window.localStorage) return;
-
-    [
-      "hi_rider_vehicles",
-      "hi_rider_quotations",
-      "hi_rider_inventory",
-      "hi_rider_jobs",
-      "hi_rider_requisitions",
-      "hi_rider_inspections",
-    ].forEach((key) => localStorage.removeItem(key));
-  }, []);
+  const [notificationPermission, setNotificationPermission] =
+    useState<BrowserNotificationPermission>(() => getBrowserNotificationPermission());
 
   const login = async (email: string, pass: string) => {
     const result = await loginWithBackend(email, pass);
@@ -213,8 +230,49 @@ function useWorkspaceState() {
     enabled: !inTests && !!import.meta.env["VITE_COMPANY_ID"],
     retry: 1,
   });
-  const [activities, setActivities] = useState<Array<{ text: string; detail: string; time: string }>>(
-    [],
+  const [activities, setActivities] = useCollection(
+    "activities",
+    [] as Array<{ text: string; detail: string; time: string }>,
+  );
+  const [notifications, rawSetNotifications] = useCollection(
+    "notifications",
+    inTests
+      ? ([] as JobCardNotification[])
+      : ([
+          {
+            id: "notif-init-1",
+            jobId: "JC-881",
+            vehicleId: "VR-1001",
+            vehicleLabel: "Ford Ranger (BAK 6213)",
+            department: "Mechanical",
+            previousStatus: "In Repair",
+            newStatus: "Completed",
+            actor: "Peter Zulu (Technician)",
+            targetRoles: ["Employee", "Foreman", "Management", "Director"],
+            targetAudience: "Mechanical team · Foreman · Management",
+            timestamp: "Today, 08:30 AM",
+            read: false,
+            title: "Job Card JC-881 · In Repair → Completed",
+            message:
+              "Ford Ranger (BAK 6213) status changed to Completed by Peter Zulu (Technician). Ready for QA inspection.",
+          },
+          {
+            id: "notif-init-2",
+            jobId: "JC-882",
+            vehicleId: "VR-1002",
+            vehicleLabel: "Toyota Hilux (BCA 4821)",
+            department: "Panel Beating",
+            previousStatus: "Pending",
+            newStatus: "In Repair",
+            actor: "Foreman 01",
+            targetRoles: ["Employee", "Foreman", "Management", "Director"],
+            targetAudience: "Panel Beating team · Foreman · Management",
+            timestamp: "Today, 09:15 AM",
+            read: false,
+            title: "Job Card JC-882 · Pending → In Repair",
+            message: "Toyota Hilux (BCA 4821) status changed to In Repair by Foreman 01.",
+          },
+        ] as JobCardNotification[]),
   );
   const [links, setLinks] = useState<Links>({});
   const linkRef = useRef(links);
@@ -495,7 +553,7 @@ function useWorkspaceState() {
       const previous = vehiclesRef.current;
       rawSetVehicles(action);
       const next = vehiclesRef.current;
-      if (inTests) return;
+      if (!backendConfigured) return;
       const added = next.filter((item) => !previous.some((old) => old.id === item.id));
       for (const vehicle of added)
         void persist(async () => {
@@ -542,7 +600,7 @@ function useWorkspaceState() {
       const previous = quotationsRef.current;
       rawSetQuotations(action);
       const next = quotationsRef.current;
-      if (inTests) return;
+      if (!backendConfigured) return;
       for (const quotation of next.filter((item) => !previous.some((old) => old.id === item.id))) {
         const refs = linkRef.current[quotation.vehicleId];
         if (!refs?.jobId) {
@@ -596,7 +654,44 @@ function useWorkspaceState() {
       const previous = jobsRef.current;
       rawSetJobs(action);
       const next = jobsRef.current;
-      if (inTests) return;
+      for (const updatedJob of next) {
+        const oldJob = previous.find((old) => old.id === updatedJob.id);
+        if (
+          oldJob &&
+          oldJob.status.trim().toLowerCase() !== updatedJob.status.trim().toLowerCase()
+        ) {
+          const vehicle = vehiclesRef.current.find((v) => v.id === updatedJob.vehicleId);
+          const vehicleLabel = vehicle
+            ? `${vehicle.make}${vehicle.plate ? ` (${vehicle.plate})` : ""}`
+            : undefined;
+          const actorName =
+            updatedJob.auditTrail?.[0]?.actor?.trim() ||
+            currentUser?.displayName?.trim() ||
+            (role === "Foreman"
+              ? foreman
+              : role === "Employee"
+                ? `${employeeDepartment} Staff`
+                : role);
+          const notification = createJobCardStatusNotification({
+            job: updatedJob,
+            previousStatus: oldJob.status,
+            newStatus: updatedJob.status,
+            actor: actorName,
+            ...(vehicleLabel ? { vehicleLabel } : {}),
+          });
+          if (notification) {
+            rawSetNotifications((items) => [notification, ...items].slice(0, 50));
+            dispatchBrowserNotification(notification, {
+              onFallbackAlert: (alert) => {
+                toast.info(alert.title, {
+                  description: `${alert.message} Notifying: ${alert.targetAudience}`,
+                });
+              },
+            });
+          }
+        }
+      }
+      if (!backendConfigured) return;
       for (const job of next.filter((item) => !previous.some((old) => old.id === item.id))) {
         const vehicle = vehiclesRef.current.find((item) => item.id === job.vehicleId);
         const refs = linkRef.current[job.vehicleId];
@@ -646,6 +741,11 @@ function useWorkspaceState() {
       updateLinks,
       parts,
       recordsQuery,
+      rawSetNotifications,
+      currentUser,
+      role,
+      foreman,
+      employeeDepartment,
     ],
   );
 
@@ -654,7 +754,7 @@ function useWorkspaceState() {
       const previous = requisitionsRef.current;
       rawSetRequisitions(action);
       const next = requisitionsRef.current;
-      if (inTests) return;
+      if (!backendConfigured) return;
       for (const requisition of next.filter(
         (item) => !previous.some((old) => old.id === item.id),
       )) {
@@ -695,7 +795,7 @@ function useWorkspaceState() {
       const previous = inspectionsRef.current;
       rawSetInspections(action);
       const next = inspectionsRef.current;
-      if (inTests) return;
+      if (!backendConfigured) return;
       for (const inspection of next.filter((item) => !previous.some((old) => old.id === item.id))) {
         const refs = linkRef.current[inspection.vehicleId];
         if (!refs?.jobId) {
@@ -737,6 +837,71 @@ function useWorkspaceState() {
   function vehicleFor(id: string) {
     return vehicles.find((v) => v.id === id);
   }
+  const enableBrowserNotifications = useCallback(async () => {
+    const perm = await requestBrowserNotificationPermission();
+    setNotificationPermission(perm);
+    if (perm === "granted") {
+      toast.success("Browser alerts enabled for job card status changes.");
+    } else if (perm === "denied") {
+      toast.error("Browser notifications are blocked in your browser settings.");
+    } else if (perm === "unsupported") {
+      toast.info("Browser desktop notifications are unavailable; in-app alerts remain active.");
+    }
+    return perm;
+  }, []);
+
+  const markNotificationRead = useCallback(
+    (id: string) => {
+      rawSetNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    },
+    [rawSetNotifications],
+  );
+
+  const markAllNotificationsRead = useCallback(() => {
+    rawSetNotifications((prev) => prev.map((n) => (n.read ? n : { ...n, read: true })));
+  }, [rawSetNotifications]);
+
+  const clearNotifications = useCallback(() => {
+    rawSetNotifications([]);
+  }, [rawSetNotifications]);
+
+  const sendTestNotification = useCallback(() => {
+    const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const testNotif: JobCardNotification = {
+      id: `notif-test-${Date.now()}`,
+      jobId: "JC-881",
+      vehicleId: "VR-1001",
+      vehicleLabel: "Ford Ranger (BAK 6213)",
+      department: employeeDepartment || "Mechanical",
+      previousStatus: "In Repair",
+      newStatus: "Completed",
+      actor: currentUser?.displayName || (role === "Foreman" ? foreman : `${role} Staff`),
+      targetRoles: ["Employee", "Foreman", "Management", "Director"],
+      targetAudience: "Mechanical team · Foreman · Management",
+      timestamp: `Today, ${timeStr}`,
+      read: false,
+      title: "Job Card JC-881 · In Repair → Completed",
+      message: "Ford Ranger (BAK 6213) status changed to Completed. Ready for QA inspection.",
+    };
+    rawSetNotifications((prev) => [testNotif, ...prev].slice(0, 50));
+    dispatchBrowserNotification(testNotif, {
+      onFallbackAlert: (alert) => {
+        toast.info(alert.title, {
+          description: `${alert.message} Notifying: ${alert.targetAudience}`,
+        });
+      },
+    });
+  }, [currentUser, employeeDepartment, foreman, role, rawSetNotifications]);
+
+  const relevantNotifications = notifications.filter((notification) =>
+    isRelevantNotification(notification, {
+      role,
+      department: employeeDepartment,
+      employeeName: currentUser?.displayName,
+    }),
+  );
+  const unreadNotificationCount = notifications.filter((n) => !n.read).length;
+
   return {
     isAuthenticated,
     currentUser,
@@ -767,6 +932,15 @@ function useWorkspaceState() {
     setInspections,
     activities,
     addActivity,
+    notifications,
+    relevantNotifications,
+    unreadNotificationCount,
+    notificationPermission,
+    enableBrowserNotifications,
+    sendTestNotification,
+    markNotificationRead,
+    markAllNotificationsRead,
+    clearNotifications,
     updateVehicleStage,
     vehicleFor,
     loading,

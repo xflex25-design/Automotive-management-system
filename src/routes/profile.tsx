@@ -4,7 +4,10 @@ import { workshopHead } from "@/lib/route-head";
 
 export const Route = createFileRoute("/profile")({
   head: () =>
-    workshopHead("Profile Settings", "Manage user details, password security, and display preferences."),
+    workshopHead(
+      "Profile Settings",
+      "Manage user details, password security, and display preferences.",
+    ),
   component: ProfilePage,
 });
 

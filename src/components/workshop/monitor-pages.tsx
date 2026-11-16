@@ -324,7 +324,11 @@ export function ApprovalPage() {
   const [filter, setFilter] = useState("Pending");
   const [sort, setSort] = useState<SortState>(null);
   const [request, setRequest] = useState<Requisition | null>(null);
-  useEffect(() => w.setRole("Director"), [w.setRole]);
+  useEffect(() => {
+    if (w.role !== "Director" && w.role !== "Management") {
+      w.setRole("Director");
+    }
+  }, [w.role, w.setRole]);
   const pending = w.requisitions.filter((r) => r.status === "Pending");
   const shown = sortRecords(
     w.requisitions.filter(

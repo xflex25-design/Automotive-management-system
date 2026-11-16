@@ -83,7 +83,16 @@ export function IntakePage() {
     }
     setSaving(true);
     try {
-      const id = `VR-${1069 + vehicles.length - 8}`;
+      const maxId = vehicles.reduce((max, item) => {
+        const match = item.id.match(/^VR-(\d+)$/);
+        return match ? Math.max(max, Number(match[1])) : max;
+      }, 1060);
+      const id = `VR-${maxId + 1}`;
+      const todayLabel = new Date().toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
       setVehicles((prev) => [
         {
           id,
@@ -92,7 +101,7 @@ export function IntakePage() {
           customer: String(form.get("customer")).trim(),
           phone: String(form.get("phone")).trim(),
           email: String(form.get("email")).trim(),
-          received: "11 Nov 2026",
+          received: todayLabel,
           stage: 0,
           department: "Unassigned",
           foreman,

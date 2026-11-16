@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowUpRight,
+  Bell,
   Wrench,
   Package,
   ClipboardList,
@@ -28,6 +29,7 @@ import { JobCardDetailDialog } from "./job-card-detail";
 import {
   appendJobCardAuditUpdate,
   departments,
+  jobCardStatuses,
   nextSortState,
   sortRecords,
   type JobCard,
@@ -48,6 +50,8 @@ export function EmployeeDashboard() {
     setJobs,
     requisitions,
     addActivity,
+    notificationPermission,
+    enableBrowserNotifications,
     loading,
   } = useWorkspace();
 
@@ -90,7 +94,7 @@ export function EmployeeDashboard() {
           )
             return false;
         } else if (jobFilterTab === "In progress") {
-          if (!normStatus.includes("progress")) return false;
+          if (!normStatus.includes("progress") && !normStatus.includes("repair")) return false;
         }
       }
 
@@ -172,7 +176,7 @@ export function EmployeeDashboard() {
   function handleUpdateProgress(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedJobForProgress) return;
-    const actorName = currentUser?.name?.trim() || `${employeeDepartment} Technician`;
+    const actorName = currentUser?.displayName?.trim() || `${employeeDepartment} Technician`;
     setJobs((prev) =>
       prev.map((j) =>
         j.id === selectedJobForProgress.id
@@ -208,6 +212,18 @@ export function EmployeeDashboard() {
         subtitle={`Manage repair tasks, log daily progress, and submit parts requisitions for the ${employeeDepartment} workshop floor.`}
       >
         <div className="flex items-center gap-2.5 flex-wrap">
+          {notificationPermission === "default" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void enableBrowserNotifications()}
+              className="gap-1.5"
+            >
+              <Bell size={14} />
+              Enable browser alerts
+            </Button>
+          )}
           <EmployeeScratchpad department={employeeDepartment} />
           <select
             aria-label="Select employee department"
@@ -452,13 +468,11 @@ export function EmployeeDashboard() {
                     value={newStatus}
                     onChange={(e) => setNewStatus(e.target.value)}
                   >
-                    <option value="In progress">In progress</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Awaiting parts">Awaiting parts</option>
-                    <option value="Approved">Approved</option>
-                    <option value="Complete">Complete</option>
-                    <option value="Flagged">Flagged</option>
-                    <option value="Rework required">Rework required</option>
+                    {jobCardStatuses.map((statusOption) => (
+                      <option key={statusOption} value={statusOption}>
+                        {statusOption}
+                      </option>
+                    ))}
                   </select>
                 </div>
 

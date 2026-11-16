@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard,
@@ -18,6 +18,7 @@ import {
   Menu,
   X,
   Bell,
+  Check,
   MessageSquare,
   Settings,
   UserRound,
@@ -67,6 +68,15 @@ export function AppShell({ children }: { children: ReactNode }) {
     logout,
     setShowOnboarding,
     currentUser,
+    notifications,
+    relevantNotifications,
+    unreadNotificationCount,
+    notificationPermission,
+    enableBrowserNotifications,
+    sendTestNotification,
+    markNotificationRead,
+    markAllNotificationsRead,
+    clearNotifications,
   } = useWorkspace();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const role: WorkspaceRole =
@@ -100,14 +110,36 @@ export function AppShell({ children }: { children: ReactNode }) {
     .map((part) => part[0]?.toUpperCase())
     .join("");
   const [open, setOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationScope, setNotificationScope] = useState<"relevant" | "all">("all");
+  const notificationsRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDetailsElement>(null);
   const closeProfileMenu = () => {
     if (profileMenuRef.current) profileMenuRef.current.open = false;
   };
+  useEffect(() => {
+    if (!notificationsOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+        setNotificationsOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setNotificationsOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [notificationsOpen]);
   const [searchScope, setSearchScope] = useState<
     "/vehicles" | "/quotations" | "/job-cards" | "/requisitions" | "/inspections"
   >("/vehicles");
   const navigate = useNavigate();
+  const displayedNotifications =
+    notificationScope === "relevant" ? relevantNotifications : notifications;
   const home =
     role === "Management"
       ? "/management"
@@ -134,11 +166,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <X />
         </Button>
         <div className="brand">
-          <img
-            src="/hirider-logo-official.jpeg"
-            alt="Workshop Logo"
-            className="brand-logo"
-          />
+          <img src="/hirider-logo-official.jpeg" alt="Workshop Logo" className="brand-logo" />
         </div>
         <div className="sidebar-dashboard-wrap">
           <Link
@@ -190,11 +218,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               <Menu />
             </Button>
-            <img
-              className="topbar-logo"
-              src="/hirider-logo-official.jpeg"
-              alt="Workshop Logo"
-            />
+            <img className="topbar-logo" src="/hirider-logo-official.jpeg" alt="Workshop Logo" />
             <span className="topbar-divider" />
             <h1 className="topbar-page-title">{pageTitle}</h1>
           </div>
@@ -251,14 +275,182 @@ export function AppShell({ children }: { children: ReactNode }) {
             </button>
           </form>
           <div className="topbar-actions">
-            <button
-              type="button"
-              className="topbar-action"
-              aria-label="Notifications"
-              title="Notifications"
-            >
-              <Bell size={19} />
-            </button>
+            <div className="relative" ref={notificationsRef}>
+              <button
+                type="button"
+                className="topbar-action"
+                aria-label={
+                  unreadNotificationCount > 0
+                    ? `Notifications (${unreadNotificationCount} unread)`
+                    : "Notifications"
+                }
+                aria-expanded={notificationsOpen}
+                aria-haspopup="dialog"
+                title="Notifications"
+                onClick={() => setNotificationsOpen((prev) => !prev)}
+              >
+                <Bell size={19} />
+                {unreadNotificationCount > 0 && (
+                  <span
+                    data-testid="notification-unread-badge"
+                    className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[11px] font-semibold tabular-nums flex items-center justify-center border-2 border-background"
+                  >
+                    {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+                  </span>
+                )}
+              </button>
+
+              {notificationsOpen && (
+                <div
+                  role="dialog"
+                  aria-label="Job card notifications"
+                  className="absolute right-0 top-12 z-50 w-[360px] max-w-[92vw] rounded-xl border border-border bg-background shadow-xl overflow-hidden"
+                >
+                  <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border bg-muted/30">
+                    <div>
+                      <div className="text-sm font-semibold text-foreground">Notifications</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {notificationPermission === "granted"
+                          ? "Browser alerts enabled"
+                          : notificationPermission === "denied"
+                            ? "Browser alerts blocked"
+                            : "In-app alerts active"}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                      {notificationPermission === "default" && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => void enableBrowserNotifications()}
+                        >
+                          Enable alerts
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-xs"
+                        onClick={sendTestNotification}
+                        title="Simulate a real-time status update"
+                      >
+                        <Bell size={11} className="mr-1" />
+                        Test alert
+                      </Button>
+                      {unreadNotificationCount > 0 && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs"
+                          onClick={markAllNotificationsRead}
+                        >
+                          <Check size={12} />
+                          Mark read
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 px-4 py-2 border-b border-border/60 bg-background">
+                    <div
+                      className="flex items-center gap-1"
+                      role="group"
+                      aria-label="Filter notifications"
+                    >
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={notificationScope === "relevant" ? "default" : "ghost"}
+                        className="h-6 px-2 text-xs"
+                        onClick={() => setNotificationScope("relevant")}
+                      >
+                        For me ({relevantNotifications.length})
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={notificationScope === "all" ? "default" : "ghost"}
+                        className="h-6 px-2 text-xs"
+                        onClick={() => setNotificationScope("all")}
+                      >
+                        All ({notifications.length})
+                      </Button>
+                    </div>
+                    {notifications.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={clearNotifications}
+                        className="text-[11px] font-medium text-muted-foreground hover:text-destructive cursor-pointer"
+                      >
+                        Clear all
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-[340px] overflow-y-auto divide-y divide-border/60">
+                    {displayedNotifications.length === 0 ? (
+                      <div className="px-4 py-8 text-center space-y-2">
+                        <p className="text-xs font-medium text-foreground">
+                          No job card notifications yet
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Alerts appear automatically when job card statuses change (e.g. In Repair
+                          to Completed).
+                        </p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-3 text-xs"
+                          onClick={sendTestNotification}
+                        >
+                          <Bell size={12} className="mr-1.5" />
+                          Send test alert
+                        </Button>
+                      </div>
+                    ) : (
+                      displayedNotifications.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            markNotificationRead(item.id);
+                            setNotificationsOpen(false);
+                            void navigate({ to: "/job-cards" });
+                          }}
+                          className={`w-full text-left px-4 py-3 hover:bg-muted/40 transition-colors cursor-pointer space-y-1 ${
+                            item.read ? "opacity-75" : "bg-primary/5"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                              {!item.read && (
+                                <span
+                                  aria-hidden="true"
+                                  className="inline-block h-2 w-2 rounded-full bg-primary shrink-0"
+                                />
+                              )}
+                              {item.title}
+                            </span>
+                            <time className="text-[10px] tabular-nums text-muted-foreground shrink-0">
+                              {item.timestamp}
+                            </time>
+                          </div>
+                          <p className="text-xs text-foreground/90 leading-snug">{item.message}</p>
+                          <div className="text-[11px] text-muted-foreground">
+                            Alerted: {item.targetAudience}
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <button
               type="button"
               className="topbar-action topbar-optional-action"
