@@ -1,26 +1,16 @@
-# Pixel Perfect Replica (36)
+# Hi Rider 4x4 World
 
-Implement exactly the screenshot and nothing else
-
-This project was built with [Lovable](https://lovdev).
-
-<!-- Local Git sync check -->
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/7a10134f-4d09-4d1f-8fe5-78629e1e684e).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+Automotive workshop management system for vehicle registration, job cards, department tracking, inspections, and parts requisitions.
 
 ## Development
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+```sh
+npm install
+npm run dev
+```
+
+## Production build
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+npm run build
 ```
