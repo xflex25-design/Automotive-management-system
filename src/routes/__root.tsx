@@ -20,6 +20,7 @@ import { AppShell } from "@/components/workshop/app-shell";
 import { OnboardingModal } from "@/components/workshop/onboarding-modal";
 import { Login } from "@/components/workshop/login";
 import { Toaster } from "@/components/ui/sonner";
+import { AiAssistantPanel } from "@/components/workshop/ai-assistant-panel";
 
 function NotFoundComponent() {
   return (
@@ -146,6 +147,7 @@ function RootShellContent() {
         <Outlet />
       </AppShell>
       <OnboardingModal />
+      <AiAssistantPanel />
     </>
   );
 }
@@ -159,7 +161,7 @@ function RootComponent() {
       <WorkspaceProvider>
         <RootShellContent />
       </WorkspaceProvider>
-      <Toaster position="bottom-right" />
+      <Toaster position="top-center" />
     </QueryClientProvider>
   );
 }

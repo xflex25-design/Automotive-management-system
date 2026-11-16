@@ -2118,7 +2118,11 @@ function CreateRecord({
       `${w.foreman} · ${id}`,
     );
     toast.success(
-      kind === "requisitions" ? `${id} submitted for Director authorization.` : `${id} saved.`,
+      kind === "jobs"
+        ? `Draft saved & job card ${id} created successfully with no errors!`
+        : kind === "requisitions"
+          ? `${id} submitted for Director authorization.`
+          : `${id} saved.`,
     );
     setVehicleId("");
     onClose();

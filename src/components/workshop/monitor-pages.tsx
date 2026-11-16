@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowUpRight,
@@ -324,11 +324,6 @@ export function ApprovalPage() {
   const [filter, setFilter] = useState("Pending");
   const [sort, setSort] = useState<SortState>(null);
   const [request, setRequest] = useState<Requisition | null>(null);
-  useEffect(() => {
-    if (w.role !== "Director" && w.role !== "Management") {
-      w.setRole("Director");
-    }
-  }, [w.role, w.setRole]);
   const pending = w.requisitions.filter((r) => r.status === "Pending");
   const shown = sortRecords(
     w.requisitions.filter(

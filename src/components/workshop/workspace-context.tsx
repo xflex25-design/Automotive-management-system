@@ -38,6 +38,7 @@ import {
   mapRequisitionResponse,
   type BackendRefs,
 } from "@/lib/api";
+import { getDefaultHomeForRole } from "@/lib/route-guard";
 
 type Links = Record<string, BackendRefs>;
 const inTests = import.meta.env.MODE === "test";
@@ -96,9 +97,20 @@ function useCollection<T>(key: string, testSeed: T[]) {
 }
 
 function useWorkspaceState() {
-  const [role, setRoleState] = useState<WorkspaceRole>("Foreman");
+  const [role, setRoleState] = useState<WorkspaceRole>(() => {
+    if (!inTests && typeof window !== "undefined" && window.localStorage) {
+      const savedRole = localStorage.getItem("hi_rider_role") as WorkspaceRole | null;
+      if (savedRole) return savedRole;
+    }
+    return "Foreman";
+  });
   const [foreman, setForeman] = useState("Foreman 01");
-  const [employeeDepartment, setEmployeeDepartmentState] = useState("Mechanical");
+  const [employeeDepartment, setEmployeeDepartmentState] = useState(() => {
+    if (!inTests && typeof window !== "undefined" && window.localStorage) {
+      return localStorage.getItem("hi_rider_department") || "Mechanical";
+    }
+    return "Mechanical";
+  });
 
   const setRole: Dispatch<SetStateAction<WorkspaceRole>> = useCallback((action) => {
     setRoleState((prev) => {
@@ -120,7 +132,13 @@ function useWorkspaceState() {
     });
   }, []);
 
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(inTests);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    if (inTests) return true;
+    if (typeof window !== "undefined" && window.localStorage) {
+      return Boolean(localStorage.getItem("hi_rider_auth_token"));
+    }
+    return false;
+  });
 
   const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(() => {
     if (inTests) {
@@ -131,24 +149,80 @@ function useWorkspaceState() {
         role: "Foreman",
       };
     }
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        const saved = localStorage.getItem("hi_rider_auth_user");
+        if (saved) return JSON.parse(saved) as AuthenticatedUser;
+      } catch {
+        // ignore
+      }
+    }
     return null;
   });
 
-  const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
+    if (inTests) return false;
+    if (typeof window !== "undefined" && window.localStorage) {
+      return (
+        Boolean(localStorage.getItem("hi_rider_auth_token")) &&
+        localStorage.getItem("hi_rider_pending_onboarding") === "true"
+      );
+    }
+    return false;
+  });
   const [notificationPermission, setNotificationPermission] =
     useState<BrowserNotificationPermission>(() => getBrowserNotificationPermission());
 
   const login = async (email: string, pass: string) => {
     const result = await loginWithBackend(email, pass);
     if (result.success && result.user && result.token) {
+      let resolvedRole = result.user.role;
+      let resolvedDept: string | undefined;
+
       if (typeof window !== "undefined" && window.localStorage) {
+        try {
+          const map = JSON.parse(localStorage.getItem("hi_rider_account_roles") || "{}") as Record<
+            string,
+            { role?: WorkspaceRole; department?: string }
+          >;
+          const saved = map[result.user.email.toLowerCase()];
+          if (saved?.role) {
+            resolvedRole = saved.role;
+            resolvedDept = saved.department;
+          }
+        } catch {
+          // ignore
+        }
+
+        localStorage.removeItem("hi_rider_pending_onboarding");
+        localStorage.setItem("hi_rider_onboarded", "true");
+
+        if (resolvedRole) {
+          localStorage.setItem("hi_rider_role", resolvedRole);
+        }
+        if (resolvedDept) {
+          localStorage.setItem("hi_rider_department", resolvedDept);
+        }
         localStorage.setItem("hi_rider_auth_token", result.token);
-        localStorage.setItem("hi_rider_auth_user", JSON.stringify(result.user));
+        localStorage.setItem(
+          "hi_rider_auth_user",
+          JSON.stringify({ ...result.user, ...(resolvedRole ? { role: resolvedRole } : {}) }),
+        );
       }
-      setCurrentUser(result.user);
+
+      if (resolvedRole) {
+        setRole(resolvedRole);
+      }
+      if (resolvedDept) {
+        setEmployeeDepartment(resolvedDept);
+      }
+      setCurrentUser({
+        ...result.user,
+        ...(resolvedRole ? { role: resolvedRole } : {}),
+      });
       setIsAuthenticated(true);
       setShowOnboarding(false);
-      return { success: true };
+      return { success: true, defaultHome: getDefaultHomeForRole(resolvedRole || "Foreman") };
     }
     return { success: false, error: result.error || "Authentication failed" };
   };
@@ -157,6 +231,8 @@ function useWorkspaceState() {
     const result = await registerWithBackend(email, pass, name);
     if (result.success && result.user && result.token) {
       if (typeof window !== "undefined" && window.localStorage) {
+        localStorage.removeItem("hi_rider_onboarded");
+        localStorage.setItem("hi_rider_pending_onboarding", "true");
         localStorage.setItem("hi_rider_auth_token", result.token);
         localStorage.setItem("hi_rider_auth_user", JSON.stringify(result.user));
       }
@@ -173,6 +249,7 @@ function useWorkspaceState() {
       localStorage.removeItem("hi_rider_auth_token");
       localStorage.removeItem("hi_rider_auth_user");
       localStorage.removeItem("hi_rider_onboarded");
+      localStorage.removeItem("hi_rider_pending_onboarding");
     }
     setIsAuthenticated(false);
     setCurrentUser(null);
@@ -180,23 +257,7 @@ function useWorkspaceState() {
     toast.info("You have signed out.");
   };
 
-  useEffect(() => {
-    if (inTests || typeof window === "undefined" || !window.localStorage) return;
-    const token = localStorage.getItem("hi_rider_auth_token");
-    if (token) {
-      setIsAuthenticated(true);
-      try {
-        const saved = localStorage.getItem("hi_rider_auth_user");
-        if (saved) setCurrentUser(JSON.parse(saved));
-      } catch {
-        // ignore
-      }
-    }
-    const savedRole = localStorage.getItem("hi_rider_role") as WorkspaceRole;
-    const savedDept = localStorage.getItem("hi_rider_department");
-    if (savedRole) setRole(savedRole);
-    if (savedDept) setEmployeeDepartment(savedDept);
-  }, []);
+  // Auth and role state initialized synchronously from localStorage above.
 
   const [search, setSearch] = useState("");
   const [vehicles, rawSetVehicles, vehiclesRef] = useCollection("vehicles", [] as Vehicle[]);

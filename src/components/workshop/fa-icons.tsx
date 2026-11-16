@@ -3,6 +3,7 @@ import {
   AlertCircle as LucideAlertCircle,
   Archive as LucideArchive,
   ArrowDown as LucideArrowDown,
+  ArrowLeft as LucideArrowLeft,
   ArrowRight as LucideArrowRight,
   ArrowUp as LucideArrowUp,
   ArrowUpDown as LucideArrowUpDown,
@@ -58,6 +59,7 @@ import {
   Upload as LucideUpload,
   User as LucideUser,
   UserCheck as LucideUserCheck,
+  Bot as LucideBot,
   Wrench as LucideWrench,
   X as LucideX,
 } from "lucide-react";
@@ -108,6 +110,7 @@ function createLucideIcon(LucideComponent: typeof LucideAlertCircle): FaIconType
 export const AlertCircle = createLucideIcon(LucideAlertCircle);
 export const Archive = createLucideIcon(LucideArchive);
 export const ArrowDown = createLucideIcon(LucideArrowDown);
+export const ArrowLeft = createLucideIcon(LucideArrowLeft);
 export const ArrowRight = createLucideIcon(LucideArrowRight);
 export const ArrowUp = createLucideIcon(LucideArrowUp);
 export const ArrowUpDown = createLucideIcon(LucideArrowUpDown);
@@ -164,5 +167,6 @@ export const Upload = createLucideIcon(LucideUpload);
 export const User = createLucideIcon(LucideUser);
 export const UserCheck = createLucideIcon(LucideUserCheck);
 export const UserRound = createLucideIcon(LucideUser);
+export const Bot = createLucideIcon(LucideBot);
 export const Wrench = createLucideIcon(LucideWrench);
 export const X = createLucideIcon(LucideX);

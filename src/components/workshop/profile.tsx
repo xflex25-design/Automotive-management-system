@@ -17,10 +17,10 @@ import {
 } from "./fa-icons";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { departments, type WorkspaceRole } from "@/lib/workshop";
+import { departments } from "@/lib/workshop";
 
 export function ProfileComponent() {
-  const { currentUser, role, setRole, employeeDepartment, setEmployeeDepartment } = useWorkspace();
+  const { currentUser, role, employeeDepartment, setEmployeeDepartment } = useWorkspace();
 
   // Password state
   const [currentPassword, setCurrentPassword] = useState("");
@@ -42,7 +42,6 @@ export function ProfileComponent() {
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [smsAlerts, setSmsAlerts] = useState(true);
   const [compactDensity, setCompactDensity] = useState(false);
-  const [preferredRole, setPreferredRole] = useState<WorkspaceRole>(role);
   const [preferredDept, setPreferredDept] = useState(employeeDepartment);
 
   function handleUpdatePassword(e: FormEvent) {
@@ -72,13 +71,15 @@ export function ProfileComponent() {
 
   function handleSavePreferences(e: FormEvent) {
     e.preventDefault();
-    setRole(preferredRole);
-    setEmployeeDepartment(preferredDept);
+    if (role === "Employee") {
+      setEmployeeDepartment(preferredDept);
+    }
 
     if (typeof window !== "undefined" && window.localStorage) {
       localStorage.setItem("hi_rider_theme", themeMode);
-      localStorage.setItem("hi_rider_role", preferredRole);
-      localStorage.setItem("hi_rider_department", preferredDept);
+      if (role === "Employee") {
+        localStorage.setItem("hi_rider_department", preferredDept);
+      }
     }
 
     toast.success("Display preferences and profile settings saved successfully.");
@@ -240,7 +241,6 @@ export function ProfileComponent() {
             onSubmit={handleSavePreferences}
             onReset={(e) => {
               e.preventDefault();
-              setPreferredRole(role);
               setPreferredDept(employeeDepartment);
               setThemeMode("light");
               setEmailNotifications(true);
@@ -250,23 +250,13 @@ export function ProfileComponent() {
           >
             <div className="registration-stack">
               <div className="registration-row-compact">
-                <label htmlFor="prof-role" className="registration-label">
-                  Default Role
-                </label>
-                <select
-                  id="prof-role"
-                  value={preferredRole}
-                  onChange={(e) => setPreferredRole(e.target.value as WorkspaceRole)}
-                  className="registration-input w-full"
-                >
-                  <option value="Foreman">Foreman</option>
-                  <option value="Director">Director</option>
-                  <option value="Management">Management</option>
-                  <option value="Employee">Employee</option>
-                </select>
+                <span className="registration-label">Assigned Role</span>
+                <div className="registration-input w-full flex items-center bg-muted/40 text-foreground font-medium">
+                  {role}
+                </div>
               </div>
 
-              {preferredRole === "Employee" && (
+              {role === "Employee" && (
                 <div className="registration-row-compact">
                   <label htmlFor="prof-dept" className="registration-label">
                     Department

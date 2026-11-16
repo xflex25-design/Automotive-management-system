@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowRight,
@@ -136,7 +136,6 @@ export function Dashboard({ role }: { role: WorkspaceRole }) {
     inspections,
     activities,
     foreman,
-    setRole,
     dispatches,
     invoices,
     handovers,
@@ -146,7 +145,6 @@ export function Dashboard({ role }: { role: WorkspaceRole }) {
     api,
     refresh,
   } = w;
-  useEffect(() => setRole(role), [role, setRole]);
   const [period, setPeriod] = useState("This week");
   const [detail, setDetail] = useState<string | null>(null);
   const [stageFilter, setStageFilter] = useState(false);
@@ -391,9 +389,9 @@ export function Dashboard({ role }: { role: WorkspaceRole }) {
     <>
       <PageHeading title={heading} subtitle={subtitle}>
         <Button variant="outline" asChild>
-          <Link to="/departments">
+          <Link to={isForeman ? "/workshop" : "/departments"}>
             <Wrench />
-            Department workload
+            {isForeman ? "Workshop progress" : "Department workload"}
           </Link>
         </Button>
         {isForeman && (
@@ -511,8 +509,8 @@ export function Dashboard({ role }: { role: WorkspaceRole }) {
         <section className="overview-section">
           <SectionHeading title="Workshop at a glance" subtitle="Current vehicle distribution">
             <Button asChild variant="link" size="sm">
-              <Link to="/workflow">
-                View workflow
+              <Link to={isForeman ? "/workshop" : "/workflow"}>
+                {isForeman ? "View progress" : "View workflow"}
                 <ArrowUpRight size={13} />
               </Link>
             </Button>

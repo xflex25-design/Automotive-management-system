@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useWorkspace } from "./workspace-context";
 import { Mail, Lock, User, Eye, EyeOff, AlertCircle, Loader2 } from "./fa-icons";
 import { Button } from "@/components/ui/button";
 
 export function Login() {
   const { login, register } = useWorkspace();
+  const navigate = useNavigate();
   const [isRegistering, setIsRegistering] = useState(false);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -29,7 +31,7 @@ export function Login() {
     setErrorMessage(null);
 
     try {
-      let result;
+      let result: { success: boolean; defaultHome?: string; error?: string };
       if (isRegistering) {
         result = await register(email, password, fullName);
       } else {
@@ -40,6 +42,8 @@ export function Login() {
         setErrorMessage(
           result.error || (isRegistering ? "Registration failed." : "Authentication failed."),
         );
+      } else if (!isRegistering && result.defaultHome) {
+        void navigate({ to: result.defaultHome, replace: true });
       }
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "An unexpected error occurred.");
@@ -259,40 +263,20 @@ export function Login() {
           </div>
         </div>
 
-        {/* Right Side: Automotive Reference Illustration with blue background */}
-        <div className="hidden lg:flex relative bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 items-center justify-center p-12 overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px] opacity-15" />
-
-          <div className="relative z-10 flex flex-col items-center text-center space-y-6 max-w-md">
-            {/* Styled Illustration Card */}
-            <div className="w-full bg-gradient-to-b from-sky-100 to-blue-100 rounded-2xl p-6 shadow-xl border border-white/30 relative overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-tr from-blue-500/10 to-transparent pointer-events-none" />
-
-              {/* Automotive illustration graphic */}
-              <div className="relative py-8 flex flex-col items-center justify-center space-y-4">
-                <div className="w-48 h-28 bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl shadow-lg relative flex items-center justify-center transform -rotate-1 group-hover:rotate-0 transition duration-300">
-                  <div className="absolute top-2 w-28 h-12 bg-sky-100/90 rounded-lg border border-blue-300 shadow-inner" />
-                  <div className="absolute bottom-2 left-4 w-8 h-8 rounded-full bg-slate-900 border-2 border-slate-300 shadow flex items-center justify-center text-white text-xs font-medium">
-                    4x4
-                  </div>
-                  <div className="absolute bottom-2 right-4 w-8 h-8 rounded-full bg-slate-900 border-2 border-slate-300 shadow flex items-center justify-center text-white text-xs font-medium">
-                    4x4
-                  </div>
-                  <div className="absolute bottom-4 bg-white px-2 py-0.5 rounded text-xs font-medium tabular-nums tracking-tight text-slate-900 shadow">
-                    CAR 2255
-                  </div>
-                </div>
-                <div className="w-full h-3 bg-slate-800 rounded-full shadow-inner relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-blue-400 to-transparent animate-pulse" />
-                </div>
-              </div>
-            </div>
+        {/* Right Side: Automotive Workshop Illustration */}
+        <div className="hidden lg:flex relative bg-white border-l border-slate-100 items-center justify-center p-10 overflow-hidden">
+          <div className="relative z-10 flex flex-col items-center text-center space-y-6 max-w-md w-full">
+            <img
+              src="/assets/aistudio/images_-_2026-11-16T105530.337_b2666e94.jpeg"
+              alt="Automotive workshop inspection and repair illustration"
+              className="w-full max-w-[380px] h-auto object-contain rounded-xl"
+            />
 
             <div className="space-y-2">
-              <h3 className="text-lg font-semibold text-white tracking-tight">
-                Precision Garage & Workshop Control
+              <h3 className="text-lg font-semibold text-slate-900 tracking-tight">
+                Precision Garage &amp; Workshop Control
               </h3>
-              <p className="text-sm text-blue-100 leading-relaxed">
+              <p className="text-sm text-slate-500 leading-relaxed">
                 Streamline vehicle registration, quotations, inventory cards, job cards, parts
                 requisitions, and departmental dispatch with real-time tracking.
               </p>

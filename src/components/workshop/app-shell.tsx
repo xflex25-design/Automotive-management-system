@@ -28,6 +28,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { useWorkspace } from "./workspace-context";
 import { type WorkspaceRole } from "@/lib/workshop";
+import { toast } from "sonner";
+import { isRouteAllowedForRole, getDefaultHomeForRole } from "@/lib/route-guard";
 
 const operationalLinks = [
   { title: "Vehicle Registration", to: "/registration", icon: Car },
@@ -66,7 +68,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     setSearch,
     requisitions,
     logout,
-    setShowOnboarding,
+    showOnboarding,
     currentUser,
     notifications,
     relevantNotifications,
@@ -79,28 +81,21 @@ export function AppShell({ children }: { children: ReactNode }) {
     clearNotifications,
   } = useWorkspace();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const role: WorkspaceRole =
-    pathname === "/management"
-      ? "Management"
-      : pathname === "/director" || pathname === "/approvals"
-        ? "Director"
-        : pathname === "/employee"
-          ? "Employee"
-          : pathname === "/"
-            ? "Foreman"
-            : selectedRole;
+  const role: WorkspaceRole = selectedRole;
   const pageTitle =
     pathname === "/management"
       ? "Management Dashboard"
-      : pathname === "/director" || pathname === "/approvals"
+      : pathname === "/director"
         ? "Director Dashboard"
-        : pathname === "/employee"
-          ? "Employee Dashboard"
-          : pathname === "/"
-            ? "Foreman Dashboard"
-            : (pathname.split("/").filter(Boolean).at(-1) ?? "Workshop")
-                .replaceAll("-", " ")
-                .replace(/\b\w/g, (letter) => letter.toUpperCase());
+        : pathname === "/approvals"
+          ? "Parts Approvals"
+          : pathname === "/employee"
+            ? "Employee Dashboard"
+            : pathname === "/"
+              ? "Foreman Dashboard"
+              : (pathname.split("/").filter(Boolean).at(-1) ?? "Workshop")
+                  .replaceAll("-", " ")
+                  .replace(/\b\w/g, (letter) => letter.toUpperCase());
   const profileLabel =
     role === "Foreman" ? foreman : role === "Employee" ? employeeDepartment : role;
   const initials = profileLabel
@@ -138,6 +133,20 @@ export function AppShell({ children }: { children: ReactNode }) {
     "/vehicles" | "/quotations" | "/job-cards" | "/requisitions" | "/inspections"
   >("/vehicles");
   const navigate = useNavigate();
+  useEffect(() => {
+    if (pathname === "/login") {
+      void navigate({ to: getDefaultHomeForRole(selectedRole), replace: true });
+      return;
+    }
+    if (!isRouteAllowedForRole(pathname, selectedRole)) {
+      if (!showOnboarding) {
+        toast.error(
+          `Access restricted: Your ${selectedRole} role does not have permission to view this page.`,
+        );
+      }
+      void navigate({ to: getDefaultHomeForRole(selectedRole), replace: true });
+    }
+  }, [pathname, selectedRole, showOnboarding, navigate]);
   const displayedNotifications =
     notificationScope === "relevant" ? relevantNotifications : notifications;
   const home =
@@ -167,6 +176,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Button>
         <div className="brand">
           <img src="/hirider-logo-official.jpeg" alt="Workshop Logo" className="brand-logo" />
+          <div className="brand-text">
+            <div className="brand-name">Hi Rider</div>
+            <div className="brand-subtitle">4x4 World</div>
+          </div>
         </div>
         <div className="sidebar-dashboard-wrap">
           <Link
@@ -183,7 +196,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {role === "Foreman" ? "Workshop workspace" : "Business workspace"}
         </div>
         <nav className="sidebar-nav" aria-label="Main navigation">
-          {role === "Director" && (
+          {(role === "Director" || role === "Management") && (
             <Link to="/approvals" className="sidebar-link" onClick={() => setOpen(false)}>
               <ShieldCheck />
               Parts Approvals
@@ -241,11 +254,20 @@ export function AppShell({ children }: { children: ReactNode }) {
                   )
                 }
               >
-                <option value="/vehicles">All records</option>
-                <option value="/quotations">Quotations</option>
-                <option value="/job-cards">Job cards</option>
-                <option value="/requisitions">Parts</option>
-                <option value="/inspections">Inspections</option>
+                {role === "Employee" ? (
+                  <>
+                    <option value="/job-cards">Job cards</option>
+                    <option value="/requisitions">Parts</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="/vehicles">All records</option>
+                    <option value="/quotations">Quotations</option>
+                    <option value="/job-cards">Job cards</option>
+                    <option value="/requisitions">Parts</option>
+                    <option value="/inspections">Inspections</option>
+                  </>
+                )}
               </select>
               <ChevronDown size={11} className="global-search-scope-icon" aria-hidden="true" />
             </div>
@@ -293,7 +315,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 {unreadNotificationCount > 0 && (
                   <span
                     data-testid="notification-unread-badge"
-                    className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[11px] font-semibold tabular-nums flex items-center justify-center border-2 border-background"
+                    className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[11px] font-semibold tabular-nums flex items-center justify-center border-2 border-background"
                   >
                     {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
                   </span>
@@ -431,7 +453,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                               {!item.read && (
                                 <span
                                   aria-hidden="true"
-                                  className="inline-block h-2 w-2 rounded-full bg-primary shrink-0"
+                                  className="inline-block h-2 w-2 rounded-full bg-red-500 shrink-0"
                                 />
                               )}
                               {item.title}
@@ -483,16 +505,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Link to="/profile" onClick={closeProfileMenu}>
                   <UserRound size={16} /> Profile
                 </Link>
-                <button
-                  type="button"
-                  onClick={() => {
-                    closeProfileMenu();
-                    setShowOnboarding(true);
-                  }}
-                  className="cursor-pointer"
-                >
-                  <LayoutDashboard size={16} /> Switch Dashboard
-                </button>
                 <Link to="/settings" onClick={closeProfileMenu}>
                   <Settings size={16} /> Account Settings
                 </Link>
@@ -511,7 +523,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             </details>
           </div>
         </header>
-        <main className="workspace">{children}</main>
+        <main className="workspace">
+          {isRouteAllowedForRole(pathname, selectedRole) ? children : null}
+        </main>
       </div>
     </div>
   );
