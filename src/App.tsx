@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WorkspaceProvider, useWorkspace } from "@/components/workshop/workspace-context";
 import { AppShell } from "@/components/workshop/app-shell";
 import { Dashboard } from "@/components/workshop/dashboard";
@@ -80,5 +81,11 @@ export function RoleRouter() {
 }
 
 export default function App() {
-  return <RoleRouter />;
+  const queryClient = new QueryClient();
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <RoleRouter />
+    </QueryClientProvider>
+  );
 }
