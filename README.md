@@ -2,7 +2,9 @@
 
 Implement exactly the screenshot and nothing else
 
-This project was built with [Lovable](https://lovable.dev).
+This project was built with [Lovable](https://lovdev).
+
+<!-- Local Git sync check -->
 
 ## Build with Lovable
 
