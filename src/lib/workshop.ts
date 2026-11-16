@@ -112,6 +112,34 @@ export type InventoryCard = {
   condition: string;
   date: string;
 };
+export const jobCardStatuses = [
+  "Pending",
+  "In progress",
+  "Awaiting parts",
+  "Approved",
+  "Complete",
+  "Flagged",
+  "Rework required",
+] as const;
+
+export type JobCardAuditEntryType = "created" | "status_change" | "note" | "employee_update";
+
+export type JobCardAuditEntry = {
+  id: string;
+  type: JobCardAuditEntryType;
+  timestamp: string;
+  recordedAtMs?: number;
+  actor: string;
+  actorRole?: string;
+  summary: string;
+  previousStatus?: string;
+  newStatus?: string;
+  progress?: number;
+  note?: string;
+  employeeName?: string;
+  department?: string;
+};
+
 export type JobCard = {
   id: string;
   vehicleId: string;
@@ -126,7 +154,10 @@ export type JobCard = {
   remarks?: string;
   preparedBy?: string;
   preparedByEmployeeId?: number;
+  assignedEmployee?: string;
+  progress?: number;
   photos?: string[];
+  auditTrail?: JobCardAuditEntry[];
 };
 export type Requisition = {
   id: string;
@@ -270,6 +301,328 @@ export function sortRecords<T, K extends string = string>(
     return compareSortValues(a, b) * factor;
   });
 }
+
+export const vehicleRegistrationStatuses = [
+  "All",
+  "Active",
+  "In Repair",
+  "Completed",
+  "Delivered",
+] as const;
+
+export type VehicleRegistrationStatusFilter = (typeof vehicleRegistrationStatuses)[number];
+export type VehicleRegistrationStatus = Exclude<VehicleRegistrationStatusFilter, "All">;
+
+export function getVehicleStatusCategory(vehicle: Vehicle): VehicleRegistrationStatus {
+  if (vehicle.released) return "Delivered";
+  if (vehicle.stage >= 10) return "Completed";
+  if (vehicle.stage >= 4) return "In Repair";
+  return "Active";
+}
+
+export function matchesVehicleSearch(vehicle: Vehicle, rawQuery: string): boolean {
+  const query = rawQuery.trim().toLowerCase();
+  if (!query) return true;
+  const searchable = [vehicle.vin ?? "", vehicle.plate, vehicle.customer, vehicle.make, vehicle.id]
+    .join(" ")
+    .toLowerCase();
+  return searchable.includes(query);
+}
+
+export function filterVehicles(
+  vehicles: readonly Vehicle[],
+  options: {
+    query?: string;
+    globalSearch?: string;
+    stage?: string;
+    status?: VehicleRegistrationStatusFilter;
+  } = {},
+): Vehicle[] {
+  const { query = "", globalSearch = "", stage = "All", status = "All" } = options;
+  return vehicles.filter(
+    (v) =>
+      matchesVehicleSearch(v, query) &&
+      matchesVehicleSearch(v, globalSearch) &&
+      (stage === "All" || String(v.stage) === stage) &&
+      (status === "All" || getVehicleStatusCategory(v) === status),
+  );
+}
+
+export function formatAuditTimestamp(date = new Date()): string {
+  return date.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export function createJobCardAuditEntry(
+  input: Omit<JobCardAuditEntry, "id" | "timestamp" | "recordedAtMs"> & {
+    id?: string;
+    timestamp?: string;
+    recordedAtMs?: number;
+  },
+): JobCardAuditEntry {
+  const now = new Date();
+  return {
+    ...input,
+    id: input.id ?? `audit-${now.getTime()}-${Math.random().toString(36).slice(2, 7)}`,
+    timestamp: input.timestamp ?? formatAuditTimestamp(now),
+    recordedAtMs: input.recordedAtMs ?? now.getTime(),
+  };
+}
+
+export type JobCardAuditUpdateInput = {
+  status?: string;
+  note?: string;
+  assignedEmployee?: string;
+  progress?: number;
+  department?: string;
+  actor: string;
+  actorRole?: string;
+  timestamp?: string;
+  recordedAtMs?: number;
+};
+
+export function appendJobCardAuditUpdate(job: JobCard, update: JobCardAuditUpdateInput): JobCard {
+  const baseMs = update.recordedAtMs ?? Date.now();
+  const timestamp = update.timestamp ?? formatAuditTimestamp(new Date(baseMs));
+  const actor = update.actor.trim() || "Workshop Staff";
+  const nextStatus = update.status?.trim();
+  const nextEmployee = update.assignedEmployee?.trim();
+  const trimmedNote = update.note?.trim() ?? "";
+  const statusChanged = Boolean(nextStatus && nextStatus !== job.status);
+  const employeeChanged = Boolean(nextEmployee && nextEmployee !== (job.assignedEmployee ?? ""));
+  const progressChanged =
+    update.progress !== undefined &&
+    Number.isFinite(update.progress) &&
+    update.progress !== job.progress;
+
+  const newEntries: JobCardAuditEntry[] = [];
+  let offset = 0;
+
+  if (statusChanged && nextStatus) {
+    newEntries.unshift(
+      createJobCardAuditEntry({
+        type: "status_change",
+        actor,
+        actorRole: update.actorRole,
+        timestamp,
+        recordedAtMs: baseMs + offset++,
+        summary: `Status updated from ${job.status} to ${nextStatus}`,
+        previousStatus: job.status,
+        newStatus: nextStatus,
+        ...(update.progress !== undefined ? { progress: update.progress } : {}),
+        ...(trimmedNote ? { note: trimmedNote } : {}),
+        department: update.department ?? job.department,
+      }),
+    );
+  }
+
+  if (employeeChanged || progressChanged) {
+    const parts: string[] = [];
+    if (employeeChanged && nextEmployee) {
+      parts.push(`Assigned to ${nextEmployee}`);
+    } else if (nextEmployee) {
+      parts.push(`Employee update by ${nextEmployee}`);
+    } else {
+      parts.push("Employee progress update");
+    }
+    if (update.progress !== undefined) {
+      parts.push(`${update.progress}% complete`);
+    }
+    newEntries.unshift(
+      createJobCardAuditEntry({
+        type: "employee_update",
+        actor,
+        actorRole: update.actorRole,
+        timestamp,
+        recordedAtMs: baseMs + offset++,
+        summary: parts.join(" · "),
+        ...(nextEmployee ? { employeeName: nextEmployee } : {}),
+        ...(update.progress !== undefined ? { progress: update.progress } : {}),
+        ...(trimmedNote && !statusChanged ? { note: trimmedNote } : {}),
+        department: update.department ?? job.department,
+      }),
+    );
+  }
+
+  if (trimmedNote && !statusChanged && !employeeChanged && !progressChanged) {
+    newEntries.unshift(
+      createJobCardAuditEntry({
+        type: "note",
+        actor,
+        actorRole: update.actorRole,
+        timestamp,
+        recordedAtMs: baseMs + offset++,
+        summary: "Added workshop note",
+        note: trimmedNote,
+        department: update.department ?? job.department,
+      }),
+    );
+  }
+
+  if (newEntries.length === 0) {
+    return job;
+  }
+
+  return {
+    ...job,
+    ...(statusChanged && nextStatus ? { status: nextStatus } : {}),
+    ...(nextEmployee ? { assignedEmployee: nextEmployee } : {}),
+    ...(update.progress !== undefined ? { progress: update.progress } : {}),
+    ...(trimmedNote ? { remarks: trimmedNote } : {}),
+    auditTrail: [...newEntries, ...(job.auditTrail ?? [])],
+  };
+}
+
+export function buildJobCardAuditTrail(
+  job: JobCard,
+  workflows: readonly Record<string, unknown>[] = [],
+): JobCardAuditEntry[] {
+  const existing = [...(job.auditTrail ?? [])];
+  const derived: JobCardAuditEntry[] = [];
+
+  if (!existing.some((entry) => entry.type === "created")) {
+    derived.push({
+      id: `audit-created-${job.id}`,
+      type: "created",
+      timestamp: job.due ? `Due ${job.due}` : "Initial intake",
+      recordedAtMs: 0,
+      actor: job.preparedBy || "Workshop Foreman",
+      actorRole: "Foreman",
+      summary: `Job card ${job.id} created for ${job.department || "Workshop"}`,
+      newStatus: existing.length > 0 ? (existing.at(-1)?.previousStatus ?? "Pending") : job.status,
+      department: job.department || "Workshop",
+      ...(job.remarks ? { note: job.remarks } : {}),
+    });
+  }
+
+  const matchingPlans = workflows.filter(
+    (plan) =>
+      (job.backendJobId !== undefined && Number(plan["jobId"]) === job.backendJobId) ||
+      (job.repairPlanId !== undefined && Number(plan["repairPlanId"]) === job.repairPlanId),
+  );
+
+  for (const plan of matchingPlans) {
+    const workOrders = Array.isArray(plan["workOrders"])
+      ? (plan["workOrders"] as Record<string, unknown>[])
+      : [];
+    for (const order of workOrders) {
+      const orderTitle = String(
+        order["workOrderNumber"] ?? order["taskTitle"] ?? "Work Order",
+      ).trim();
+      const dept = String(order["departmentName"] ?? job.department ?? "Workshop");
+      const assignments = Array.isArray(order["assignments"])
+        ? (order["assignments"] as Record<string, unknown>[])
+        : [];
+      for (const assignment of assignments) {
+        const empName = String(assignment["employeeName"] ?? "Technician");
+        const assignedAt = String(assignment["assignedAt"] ?? "");
+        const parsedMs = assignedAt ? Date.parse(assignedAt) : NaN;
+        derived.push({
+          id: `audit-assign-${String(assignment["assignmentId"] ?? `${orderTitle}-${empName}`)}`,
+          type: "employee_update",
+          timestamp: Number.isNaN(parsedMs)
+            ? assignedAt || "Recorded"
+            : formatAuditTimestamp(new Date(parsedMs)),
+          recordedAtMs: Number.isNaN(parsedMs) ? 1 : parsedMs,
+          actor: empName,
+          actorRole: String(assignment["assignmentRole"] ?? "Employee"),
+          employeeName: empName,
+          department: dept,
+          summary: `Assigned ${empName} to ${orderTitle}`,
+        });
+      }
+
+      const visits = Array.isArray(order["departmentVisits"])
+        ? (order["departmentVisits"] as Record<string, unknown>[])
+        : [];
+      for (const visit of visits) {
+        const visitStatus = String(visit["status"] ?? "OPEN");
+        const visitDept = String(visit["departmentName"] ?? dept);
+        const arrivedAt = String(visit["arrivedAt"] ?? visit["createdAt"] ?? "");
+        const parsedMs = arrivedAt ? Date.parse(arrivedAt) : NaN;
+        derived.push({
+          id: `audit-visit-${String(visit["departmentVisitId"] ?? `${orderTitle}-${visitDept}`)}`,
+          type: "status_change",
+          timestamp: Number.isNaN(parsedMs)
+            ? arrivedAt || "Recorded"
+            : formatAuditTimestamp(new Date(parsedMs)),
+          recordedAtMs: Number.isNaN(parsedMs) ? 2 : parsedMs,
+          actor: visitDept,
+          actorRole: "Department",
+          department: visitDept,
+          newStatus: visitStatus,
+          summary: `${visitDept} visit · ${visitStatus}`,
+          ...(visit["notes"] ? { note: String(visit["notes"]) } : {}),
+        });
+      }
+
+      const sessions = Array.isArray(order["sessions"])
+        ? (order["sessions"] as Record<string, unknown>[])
+        : [];
+      for (const session of sessions) {
+        const empName = String(session["employeeName"] ?? "Technician");
+        const startedAt = String(session["startedAt"] ?? session["endedAt"] ?? "");
+        const parsedMs = startedAt ? Date.parse(startedAt) : NaN;
+        derived.push({
+          id: `audit-session-${String(session["workSessionId"] ?? `${orderTitle}-${empName}-${startedAt}`)}`,
+          type: "employee_update",
+          timestamp: Number.isNaN(parsedMs)
+            ? startedAt || "Recorded"
+            : formatAuditTimestamp(new Date(parsedMs)),
+          recordedAtMs: Number.isNaN(parsedMs) ? 3 : parsedMs,
+          actor: empName,
+          actorRole: "Technician",
+          employeeName: empName,
+          department: dept,
+          summary: `${empName} logged work session (${String(session["status"] ?? "Active")})`,
+          ...(session["notes"] ? { note: String(session["notes"]) } : {}),
+        });
+      }
+
+      const evidence = Array.isArray(order["evidence"])
+        ? (order["evidence"] as Record<string, unknown>[])
+        : [];
+      for (const item of evidence) {
+        const noteText = String(item["notes"] ?? item["description"] ?? "").trim();
+        if (!noteText) continue;
+        const createdAt = String(item["createdAt"] ?? "");
+        const parsedMs = createdAt ? Date.parse(createdAt) : NaN;
+        derived.push({
+          id: `audit-evidence-${String(item["evidenceId"] ?? noteText)}`,
+          type: "note",
+          timestamp: Number.isNaN(parsedMs)
+            ? createdAt || "Recorded"
+            : formatAuditTimestamp(new Date(parsedMs)),
+          recordedAtMs: Number.isNaN(parsedMs) ? 4 : parsedMs,
+          actor: String(item["uploadedByName"] ?? job.preparedBy ?? "Technician"),
+          department: dept,
+          summary: `Work order note · ${orderTitle}`,
+          note: noteText,
+        });
+      }
+    }
+  }
+
+  const combined = [...existing, ...derived];
+  return combined.sort((a, b) => (b.recordedAtMs ?? 0) - (a.recordedAtMs ?? 0));
+}
+
+export function filterJobCardAuditTrail(
+  entries: readonly JobCardAuditEntry[],
+  filter: "all" | JobCardAuditEntryType,
+): JobCardAuditEntry[] {
+  if (filter === "all") return [...entries];
+  if (filter === "note") {
+    return entries.filter((entry) => entry.type === "note" || Boolean(entry.note?.trim()));
+  }
+  return entries.filter((entry) => entry.type === filter);
+}
+
 export const sampleVehicles: Vehicle[] = [];
 export const sampleQuotations: Quotation[] = [];
 export const sampleInventory: InventoryCard[] = [];
@@ -277,10 +630,146 @@ export const sampleJobs: JobCard[] = [];
 export const sampleRequisitions: Requisition[] = [];
 export const sampleInspections: Inspection[] = [];
 
-export const departmentStats = [
-  { name: "Mechanical", active: 12, completed: 18, pending: 4, delays: 2, efficiency: 82 },
-  { name: "Panel Beating", active: 8, completed: 12, pending: 3, delays: 2, efficiency: 74 },
-  { name: "Fitting", active: 6, completed: 14, pending: 2, delays: 0, efficiency: 91 },
-  { name: "Painting", active: 5, completed: 9, pending: 2, delays: 1, efficiency: 85 },
-  { name: "Sanding", active: 4, completed: 11, pending: 1, delays: 1, efficiency: 88 },
-];
+export type DepartmentOverviewMetric = {
+  name: string;
+  assigned: number;
+  active: number;
+  completed: number;
+  pending: number;
+  delays: number;
+  efficiency: number;
+};
+
+export const departmentStats: DepartmentOverviewMetric[] = [];
+
+function isPastDueDate(rawDue: unknown, referenceIsoDate: string): boolean {
+  if (typeof rawDue !== "string") return false;
+  const trimmed = rawDue.trim();
+  if (!trimmed) return false;
+  const parsed = Date.parse(trimmed.length === 10 ? `${trimmed}T23:59:59` : trimmed);
+  const refParsed = Date.parse(`${referenceIsoDate}T00:00:00`);
+  if (Number.isNaN(parsed) || Number.isNaN(refParsed)) return false;
+  return parsed < refParsed;
+}
+
+export function buildDepartmentOverview(
+  jobs: readonly JobCard[],
+  workflows: readonly Record<string, unknown>[] = [],
+  referenceDate: string = new Date().toISOString().slice(0, 10),
+): DepartmentOverviewMetric[] {
+  type Accumulator = {
+    vehicles: Set<string>;
+    total: number;
+    active: number;
+    completed: number;
+    pending: number;
+    delays: number;
+  };
+  const buckets = new Map<string, Accumulator>();
+  const ensure = (department: string): Accumulator => {
+    const key = department.trim() || "Workshop";
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = {
+        vehicles: new Set<string>(),
+        total: 0,
+        active: 0,
+        completed: 0,
+        pending: 0,
+        delays: 0,
+      };
+      buckets.set(key, bucket);
+    }
+    return bucket;
+  };
+
+  const linkedPlanJobIds = new Set<number>();
+  const linkedPlanIds = new Set<number>();
+
+  for (const plan of workflows) {
+    const workOrders = Array.isArray(plan["workOrders"])
+      ? (plan["workOrders"] as Record<string, unknown>[])
+      : [];
+    if (workOrders.length === 0) continue;
+    const planJobId = Number(plan["jobId"]);
+    const planId = Number(plan["repairPlanId"]);
+    if (Number.isFinite(planJobId) && planJobId > 0) linkedPlanJobIds.add(planJobId);
+    if (Number.isFinite(planId) && planId > 0) linkedPlanIds.add(planId);
+
+    const matchingJob = jobs.find(
+      (j) =>
+        (j.backendJobId !== undefined && j.backendJobId === planJobId) ||
+        (j.repairPlanId !== undefined && j.repairPlanId === planId),
+    );
+    const planVehicleKey =
+      matchingJob?.vehicleId ||
+      (typeof plan["vehicleId"] === "string" || typeof plan["vehicleId"] === "number"
+        ? `veh-${String(plan["vehicleId"])}`
+        : `plan-${planId || planJobId}`);
+
+    for (const order of workOrders) {
+      const dept = String(order["departmentName"] ?? matchingJob?.department ?? "Workshop");
+      const bucket = ensure(dept);
+      bucket.total += 1;
+      bucket.vehicles.add(
+        order["workOrderId"] ? `${planVehicleKey}-${dept}` : `${planVehicleKey}-${bucket.total}`,
+      );
+      const status = String(order["status"] ?? "").toUpperCase();
+      const isCompleted = status === "COMPLETED" || status === "CONFIRMED";
+      const isActive = status === "IN_PROGRESS" || status === "ACTIVE" || status === "STARTED";
+      if (isCompleted) {
+        bucket.completed += 1;
+      } else if (isActive) {
+        bucket.active += 1;
+      } else {
+        bucket.pending += 1;
+      }
+      const isBlocked = Boolean(order["isBlocked"]) || status === "BLOCKED";
+      if (!isCompleted && (isBlocked || isPastDueDate(order["dueAt"], referenceDate))) {
+        bucket.delays += 1;
+      }
+    }
+  }
+
+  for (const job of jobs) {
+    const coveredByWorkflow =
+      (job.backendJobId !== undefined && linkedPlanJobIds.has(job.backendJobId)) ||
+      (job.repairPlanId !== undefined && linkedPlanIds.has(job.repairPlanId));
+    if (coveredByWorkflow) continue;
+
+    const bucket = ensure(job.department || "Workshop");
+    bucket.total += 1;
+    bucket.vehicles.add(job.vehicleId || job.id);
+    const normalized = job.status.trim().toLowerCase();
+    const isCompleted = normalized === "complete" || normalized === "completed";
+    const isActive = normalized === "in progress" || normalized === "approved";
+    if (isCompleted) {
+      bucket.completed += 1;
+    } else if (isActive) {
+      bucket.active += 1;
+    } else {
+      bucket.pending += 1;
+    }
+    const isAwaitingParts = normalized === "awaiting parts" || normalized === "delayed";
+    if (!isCompleted && (isAwaitingParts || isPastDueDate(job.due, referenceDate))) {
+      bucket.delays += 1;
+    }
+  }
+
+  const departmentOrder = new Map<string, number>(departments.map((d, index) => [d, index]));
+  return Array.from(buckets.entries())
+    .sort(([a], [b]) => {
+      const idxA = departmentOrder.get(a) ?? Number.MAX_SAFE_INTEGER;
+      const idxB = departmentOrder.get(b) ?? Number.MAX_SAFE_INTEGER;
+      return idxA !== idxB ? idxA - idxB : a.localeCompare(b);
+    })
+    .map(([name, bucket]) => ({
+      name,
+      assigned: bucket.vehicles.size,
+      active: bucket.active,
+      completed: bucket.completed,
+      pending: bucket.pending,
+      delays: bucket.delays,
+      efficiency: bucket.total ? Math.round((bucket.completed / bucket.total) * 100) : 0,
+    }));
+}

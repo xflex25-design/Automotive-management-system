@@ -1,6 +1,15 @@
 import { useState, useMemo } from "react";
 import { Link } from "@tanstack/react-router";
-import { Wrench, Package, ClipboardList, CheckCircle2, Plus, RotateCcw, Search } from "./fa-icons";
+import {
+  ArrowUpRight,
+  Wrench,
+  Package,
+  ClipboardList,
+  CheckCircle2,
+  Plus,
+  RotateCcw,
+  Search,
+} from "./fa-icons";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useWorkspace } from "./workspace-context";
@@ -15,7 +24,9 @@ import {
   TableFooter,
   ToolbarSearch,
 } from "./shared";
+import { JobCardDetailDialog } from "./job-card-detail";
 import {
+  appendJobCardAuditUpdate,
   departments,
   nextSortState,
   sortRecords,
@@ -31,6 +42,7 @@ export function EmployeeDashboard() {
   const {
     employeeDepartment,
     setEmployeeDepartment,
+    currentUser,
     vehicles,
     jobs,
     setJobs,
@@ -39,6 +51,7 @@ export function EmployeeDashboard() {
     loading,
   } = useWorkspace();
 
+  const [detailJobId, setDetailJobId] = useState<string | null>(null);
   const [selectedJobForProgress, setSelectedJobForProgress] = useState<JobCard | null>(null);
   const [newProgress, setNewProgress] = useState<number>(50);
   const [newStatus, setNewStatus] = useState<string>("In progress");
@@ -159,14 +172,26 @@ export function EmployeeDashboard() {
   function handleUpdateProgress(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedJobForProgress) return;
+    const actorName = currentUser?.name?.trim() || `${employeeDepartment} Technician`;
     setJobs((prev) =>
-      prev.map((j) => (j.id === selectedJobForProgress.id ? { ...j, status: newStatus } : j)),
+      prev.map((j) =>
+        j.id === selectedJobForProgress.id
+          ? appendJobCardAuditUpdate(j, {
+              status: newStatus,
+              progress: newProgress,
+              note: progressNote.trim() || undefined,
+              assignedEmployee: actorName,
+              actor: actorName,
+              actorRole: "Employee",
+              department: employeeDepartment,
+            })
+          : j,
+      ),
     );
-    addActivity({
-      text: `${employeeDepartment} updated job ${selectedJobForProgress.id} to ${newStatus} (${newProgress}%)`,
-      detail: `${employeeDepartment} · ${progressNote || "Daily progress update recorded"}`,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    });
+    addActivity(
+      `${employeeDepartment} updated job ${selectedJobForProgress.id} to ${newStatus} (${newProgress}%)`,
+      `${actorName} · ${progressNote.trim() || "Daily progress update recorded"}`,
+    );
     toast.success(
       `Job ${selectedJobForProgress.id} progress updated to ${newProgress}% (${newStatus})`,
     );
@@ -358,21 +383,35 @@ export function EmployeeDashboard() {
                   </span>
                 </td>
                 <td>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSelectedJobForProgress(job);
-                      setNewStatus(job.status);
-                    }}
-                  >
-                    Update Progress
-                  </Button>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedJobForProgress(job);
+                        setNewStatus(job.status);
+                        setNewProgress(job.progress ?? 50);
+                      }}
+                    >
+                      Update Progress
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="Job card details"
+                      aria-label={`View ${job.id}`}
+                      onClick={() => setDetailJobId(job.id)}
+                    >
+                      <ArrowUpRight />
+                    </Button>
+                  </div>
                 </td>
               </tr>
             );
           })}
         </DataTable>
+
+        <JobCardDetailDialog jobId={detailJobId} onClose={() => setDetailJobId(null)} />
 
         <TableFooter count={filteredAndSortedJobs.length} label="jobs" />
       </section>

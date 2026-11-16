@@ -11,6 +11,17 @@ import {
   formatCompactCurrency,
   nextSortState,
   sortRecords,
+  matchesVehicleSearch,
+  filterVehicles,
+  getVehicleStatusCategory,
+  vehicleRegistrationStatuses,
+  createJobCardAuditEntry,
+  appendJobCardAuditUpdate,
+  buildJobCardAuditTrail,
+  filterJobCardAuditTrail,
+  departmentStats,
+  buildDepartmentOverview,
+  type JobCard,
 } from "@/lib/workshop";
 import { toCreateJobCardRequest } from "@/lib/api";
 
@@ -303,5 +314,297 @@ describe("Garage staff and official workflow", () => {
     expect(req.foremanRemarks).toBe(
       "Department: Panel Beating · Customer noted small scratch on driver door",
     );
+  });
+
+  it("filters vehicles by VIN, license plate, or owner name case-insensitively", () => {
+    const vehiclesWithDetails = [
+      {
+        ...fixtureVehicles[0]!,
+        customer: "John Mwansa",
+        vin: "1HGBH41JXMN109186",
+      },
+      {
+        ...fixtureVehicles[1]!,
+        customer: "Sarah Banda",
+        vin: "2T1BURHE0JC073215",
+      },
+      {
+        ...fixtureVehicles[2]!,
+        customer: "Peter Phiri",
+      },
+    ];
+
+    expect(matchesVehicleSearch(vehiclesWithDetails[0]!, "109186")).toBe(true);
+    expect(matchesVehicleSearch(vehiclesWithDetails[0]!, "1hgbh41jxmn109186")).toBe(true);
+    expect(matchesVehicleSearch(vehiclesWithDetails[0]!, "bca 4821")).toBe(true);
+    expect(matchesVehicleSearch(vehiclesWithDetails[0]!, "mwansa")).toBe(true);
+    expect(matchesVehicleSearch(vehiclesWithDetails[2]!, "109186")).toBe(false);
+
+    expect(filterVehicles(vehiclesWithDetails, { query: "  2T1BUR " }).map((v) => v.id)).toEqual([
+      "VR-1067",
+    ]);
+    expect(filterVehicles(vehiclesWithDetails, { query: "bce 2156" }).map((v) => v.id)).toEqual([
+      "VR-1066",
+    ]);
+    expect(filterVehicles(vehiclesWithDetails, { query: "john" }).map((v) => v.id)).toEqual([
+      "VR-1068",
+    ]);
+    expect(
+      filterVehicles(vehiclesWithDetails, { query: "2T1BUR", stage: "2" }).map((v) => v.id),
+    ).toEqual(["VR-1067"]);
+    expect(
+      filterVehicles(vehiclesWithDetails, { query: "2T1BUR", stage: "9" }).map((v) => v.id),
+    ).toEqual([]);
+    expect(filterVehicles(vehiclesWithDetails, { query: "" })).toHaveLength(3);
+  });
+
+  it("categorizes vehicle status and filters vehicles by status alongside search queries", () => {
+    expect(vehicleRegistrationStatuses).toEqual([
+      "All",
+      "Active",
+      "In Repair",
+      "Completed",
+      "Delivered",
+    ]);
+
+    const statusVehicles = [
+      { ...fixtureVehicles[1]!, customer: "Sarah Banda", stage: 2 }, // Active
+      { ...fixtureVehicles[0]!, customer: "John Mwansa", stage: 9 }, // In Repair
+      { ...fixtureVehicles[3]!, customer: "Grace Zulu", stage: 10 }, // Completed
+      { ...fixtureVehicles[5]!, customer: "Peter Phiri", stage: 11, released: true }, // Delivered
+    ];
+
+    expect(getVehicleStatusCategory(statusVehicles[0]!)).toBe("Active");
+    expect(getVehicleStatusCategory(statusVehicles[1]!)).toBe("In Repair");
+    expect(getVehicleStatusCategory(statusVehicles[2]!)).toBe("Completed");
+    expect(getVehicleStatusCategory(statusVehicles[3]!)).toBe("Delivered");
+
+    expect(filterVehicles(statusVehicles, { status: "All" })).toHaveLength(4);
+    expect(filterVehicles(statusVehicles, { status: "Active" }).map((v) => v.id)).toEqual([
+      "VR-1067",
+    ]);
+    expect(filterVehicles(statusVehicles, { status: "In Repair" }).map((v) => v.id)).toEqual([
+      "VR-1068",
+    ]);
+    expect(filterVehicles(statusVehicles, { status: "Completed" }).map((v) => v.id)).toEqual([
+      "VR-1065",
+    ]);
+    expect(filterVehicles(statusVehicles, { status: "Delivered" }).map((v) => v.id)).toEqual([
+      "VR-1063",
+    ]);
+    expect(
+      filterVehicles(statusVehicles, { query: "Grace", status: "Completed" }).map((v) => v.id),
+    ).toEqual(["VR-1065"]);
+    expect(
+      filterVehicles(statusVehicles, { query: "Grace", status: "Active" }).map((v) => v.id),
+    ).toEqual([]);
+  });
+
+  it("tracks job card status changes, notes, employee updates, and workflow events in the audit trail", () => {
+    const baseJob: JobCard = {
+      id: "JC-900",
+      vehicleId: "VR-1068",
+      department: "Mechanical",
+      work: "Inspect front suspension and replace brake pads",
+      status: "Pending",
+      due: "2026-11-20",
+      remarks: "Initial foreman check completed",
+      preparedBy: "Foreman 01",
+      backendJobId: 501,
+      auditTrail: [
+        createJobCardAuditEntry({
+          type: "created",
+          actor: "Foreman 01",
+          actorRole: "Foreman",
+          summary: "Job card JC-900 created for Mechanical",
+          newStatus: "Pending",
+          department: "Mechanical",
+          note: "Initial foreman check completed",
+          recordedAtMs: 1000,
+          timestamp: "15 Nov 2026, 08:00",
+        }),
+      ],
+    };
+
+    const withStatusAndEmployee = appendJobCardAuditUpdate(baseJob, {
+      status: "In progress",
+      assignedEmployee: "Peter Zulu",
+      progress: 40,
+      note: "Removed front caliper and ordered bushings",
+      actor: "Peter Zulu",
+      actorRole: "Employee",
+      recordedAtMs: 2000,
+      timestamp: "15 Nov 2026, 09:30",
+    });
+
+    expect(withStatusAndEmployee.status).toBe("In progress");
+    expect(withStatusAndEmployee.assignedEmployee).toBe("Peter Zulu");
+    expect(withStatusAndEmployee.progress).toBe(40);
+    expect(withStatusAndEmployee.auditTrail).toHaveLength(3);
+
+    const withNoteOnly = appendJobCardAuditUpdate(withStatusAndEmployee, {
+      status: "In progress",
+      assignedEmployee: "Peter Zulu",
+      progress: 40,
+      note: "Bushings delivered from stores",
+      actor: "Foreman 01",
+      actorRole: "Foreman",
+      recordedAtMs: 3000,
+      timestamp: "15 Nov 2026, 11:00",
+    });
+
+    expect(withNoteOnly.auditTrail).toHaveLength(4);
+    expect(withNoteOnly.remarks).toBe("Bushings delivered from stores");
+
+    // No-op when nothing changed and no note provided
+    const unchanged = appendJobCardAuditUpdate(withNoteOnly, {
+      status: "In progress",
+      assignedEmployee: "Peter Zulu",
+      progress: 40,
+      note: "   ",
+      actor: "Foreman 01",
+    });
+    expect(unchanged).toBe(withNoteOnly);
+
+    const workflows = [
+      {
+        jobId: 501,
+        workOrders: [
+          {
+            workOrderNumber: "WO-12",
+            departmentName: "Mechanical",
+            assignments: [
+              {
+                assignmentId: 10,
+                employeeName: "Mary Phiri",
+                assignmentRole: "TECHNICIAN",
+                assignedAt: "2026-11-15T12:00:00Z",
+              },
+            ],
+            departmentVisits: [
+              {
+                departmentVisitId: 20,
+                departmentName: "Mechanical",
+                status: "OPEN",
+                arrivedAt: "2026-11-15T12:15:00Z",
+              },
+            ],
+            evidence: [
+              {
+                evidenceId: 30,
+                notes: "Torque verified on hub bolts",
+                uploadedByName: "Mary Phiri",
+                createdAt: "2026-11-15T12:30:00Z",
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const fullTrail = buildJobCardAuditTrail(withNoteOnly, workflows);
+    expect(fullTrail.length).toBe(7);
+    // Newest entries come first (2026-11-15T12:30Z > recordedAtMs 3000)
+    expect(filterJobCardAuditTrail(fullTrail, "status_change").length).toBe(2);
+    expect(filterJobCardAuditTrail(fullTrail, "note").length).toBe(4);
+    expect(filterJobCardAuditTrail(fullTrail, "employee_update").length).toBe(2);
+    expect(filterJobCardAuditTrail(fullTrail, "created").length).toBe(1);
+
+    // Synthesizes a created entry if job has no explicit auditTrail
+    const bareTrail = buildJobCardAuditTrail({
+      ...baseJob,
+      auditTrail: undefined,
+    });
+    expect(bareTrail).toHaveLength(1);
+    expect(bareTrail[0]?.type).toBe("created");
+    expect(bareTrail[0]?.note).toBe("Initial foreman check completed");
+  });
+
+  it("keeps department overview empty without sample data until jobs or workflows are recorded", () => {
+    expect(departmentStats).toEqual([]);
+    expect(buildDepartmentOverview([], [])).toEqual([]);
+
+    const jobs: JobCard[] = [
+      {
+        id: "JC-101",
+        vehicleId: "VR-1001",
+        department: "Mechanical",
+        work: "Overhaul front axle",
+        status: "In progress",
+        due: "2026-11-20",
+      },
+      {
+        id: "JC-102",
+        vehicleId: "VR-1002",
+        department: "Mechanical",
+        work: "Replace brake pads",
+        status: "Complete",
+        due: "2026-11-10",
+      },
+      {
+        id: "JC-103",
+        vehicleId: "VR-1003",
+        department: "Painting",
+        work: "Respray fender",
+        status: "Awaiting parts",
+        due: "2026-11-18",
+      },
+      {
+        // Covered by workflow below -> should not be double counted
+        id: "JC-104",
+        vehicleId: "VR-1004",
+        department: "Fitting",
+        work: "Bullbar mount",
+        status: "Pending",
+        due: "2026-11-25",
+        backendJobId: 901,
+      },
+    ];
+
+    const workflows = [
+      {
+        jobId: 901,
+        repairPlanId: 401,
+        workOrders: [
+          {
+            workOrderId: 1,
+            departmentName: "Fitting",
+            status: "COMPLETED",
+            dueAt: "2026-11-25",
+          },
+        ],
+      },
+    ];
+
+    const overview = buildDepartmentOverview(jobs, workflows, "2026-11-15");
+    expect(overview).toEqual([
+      {
+        name: "Mechanical",
+        assigned: 2,
+        active: 1,
+        completed: 1,
+        pending: 0,
+        delays: 0,
+        efficiency: 50,
+      },
+      {
+        name: "Fitting",
+        assigned: 1,
+        active: 0,
+        completed: 1,
+        pending: 0,
+        delays: 0,
+        efficiency: 100,
+      },
+      {
+        name: "Painting",
+        assigned: 1,
+        active: 0,
+        completed: 0,
+        pending: 1,
+        delays: 1,
+        efficiency: 0,
+      },
+    ]);
   });
 });

@@ -1358,6 +1358,9 @@ progress::-moz-progress-bar {
   border: 1px solid var(--border);
   border-radius: 4px;
 }
+.registration-panel + .table-section {
+  margin-top: 24px;
+}
 .registration-header {
   display: flex;
   align-items: center;

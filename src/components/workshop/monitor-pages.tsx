@@ -59,8 +59,10 @@ import { VehicleDetail } from "./vehicle-detail";
 import { RequestDetail } from "./record-pages";
 import {
   workflowStages,
-  departmentStats,
+  departments,
+  buildDepartmentOverview,
   canAuthorizeRelease,
+  filterVehicles,
   money,
   nextSortState,
   sortRecords,
@@ -76,18 +78,14 @@ export function VehiclesPage() {
   const [detail, setDetail] = useState<string | null>(null);
   const [release, setRelease] = useState<string | null>(null);
   const filtered = sortRecords(
-    w.vehicles.filter(
-      (v) =>
-        `${v.make} ${v.id} ${v.plate} ${v.customer}`
-          .toLowerCase()
-          .includes(`${query} ${w.search}`.trim().toLowerCase()) &&
-        (stage === "All" || String(v.stage) === stage),
-    ),
+    filterVehicles(w.vehicles, { query, globalSearch: w.search, stage }),
     sort,
     (v, key) => {
       switch (key) {
         case "vehicle":
           return `${v.make} ${v.plate}`;
+        case "vin":
+          return v.vin ?? "";
         case "customer":
           return v.customer;
         case "received":
@@ -119,8 +117,8 @@ export function VehiclesPage() {
       </PageHeading>
       <div className="toolbar">
         <ToolbarSearch
-          ariaLabel="Search vehicle records"
-          placeholder="Search vehicle, registration or customer..."
+          ariaLabel="Search vehicles by VIN, license plate, or owner name"
+          placeholder="Search by VIN, license plate, or owner name..."
           value={query}
           onChange={setQuery}
         />
@@ -144,6 +142,7 @@ export function VehiclesPage() {
       <DataTable
         headers={[
           { label: "Vehicle", sortKey: "vehicle" },
+          { label: "VIN", sortKey: "vin" },
           { label: "Customer", sortKey: "customer" },
           { label: "Received", sortKey: "received" },
           { label: "Current stage", sortKey: "stage" },
@@ -214,6 +213,9 @@ export function VehiclesPage() {
           <tr key={v.id}>
             <td>
               <VehicleCell vehicle={v} />
+            </td>
+            <td>
+              <span className="font-mono text-xs">{v.vin || "—"}</span>
             </td>
             <td>{v.customer}</td>
             <td>{v.received}</td>
@@ -513,7 +515,10 @@ export function WorkflowPage() {
   const w = useWorkspace();
   const [vehicleId, setVehicleId] = useState(w.vehicles[0]?.id ?? "");
   const [sort, setSort] = useState<SortState>(null);
-  const v = w.vehicleFor(vehicleId);
+  const selectedVehicleId = w.vehicles.some((item) => item.id === vehicleId)
+    ? vehicleId
+    : (w.vehicles[0]?.id ?? "");
+  const v = w.vehicleFor(selectedVehicleId);
   const sortedVehicles = sortRecords(w.vehicles, sort, (vehicle, key) => {
     switch (key) {
       case "vehicle":
@@ -551,22 +556,28 @@ export function WorkflowPage() {
         <div>
           <h2 className="text-base font-semibold">Vehicle workflow</h2>
           <p className="text-xs font-medium text-muted-foreground mt-1">
-            {v?.customer} · {v?.foreman}
+            {v ? `${v.customer || "Customer"} · ${v.foreman}` : "No vehicle selected"}
           </p>
         </div>
-        <Select value={vehicleId} onValueChange={setVehicleId}>
+        <Select value={selectedVehicleId} onValueChange={setVehicleId}>
           <SelectTrigger
             className="w-[270px] h-[38px] rounded-[6px] border-[#d1d5db] bg-background text-sm font-normal shadow-none"
             aria-label="Track vehicle"
           >
-            <SelectValue />
+            <SelectValue placeholder="Select a vehicle" />
           </SelectTrigger>
           <SelectContent>
-            {w.vehicles.map((v) => (
-              <SelectItem key={v.id} value={v.id}>
-                {v.make} · {v.plate}
+            {w.vehicles.length === 0 ? (
+              <SelectItem value="__empty" disabled>
+                No registered vehicles
               </SelectItem>
-            ))}
+            ) : (
+              w.vehicles.map((vehicle) => (
+                <SelectItem key={vehicle.id} value={vehicle.id}>
+                  {vehicle.make} · {vehicle.plate}
+                </SelectItem>
+              ))
+            )}
           </SelectContent>
         </Select>
       </div>
@@ -660,12 +671,16 @@ export function DepartmentsPage() {
   const [detail, setDetail] = useState<string | null>(null);
   const [deptSort, setDeptSort] = useState<SortState>(null);
   const [jobSort, setJobSort] = useState<SortState>(null);
-  const sortedDepartments = sortRecords(departmentStats, deptSort, (d, key) => {
+  const departmentOverview = buildDepartmentOverview(w.jobs, w.workflows);
+  const filterDepartments = Array.from(
+    new Set<string>([...departments, ...departmentOverview.map((d) => d.name)]),
+  );
+  const sortedDepartments = sortRecords(departmentOverview, deptSort, (d, key) => {
     switch (key) {
       case "name":
         return d.name;
       case "assigned":
-        return d.active + d.pending;
+        return d.assigned;
       case "active":
         return d.active;
       case "completed":
@@ -707,7 +722,7 @@ export function DepartmentsPage() {
         title="Department Performance"
         subtitle="Mechanical, panel beating, fitting, painting and sanding"
       >
-        <ExportButton filename="department-performance" rows={departmentStats} />
+        <ExportButton filename="department-performance" rows={departmentOverview} />
       </PageHeading>
       <DepartmentCards />
       <section className="table-section mt-8">
@@ -746,7 +761,7 @@ export function DepartmentsPage() {
           {sortedDepartments.map((d) => (
             <tr key={d.name}>
               <td className="cell-title">{d.name}</td>
-              <td className="text-right tabular-nums">{d.active + d.pending}</td>
+              <td className="text-right tabular-nums">{d.assigned}</td>
               <td className="text-right tabular-nums">{d.active}</td>
               <td className="text-right tabular-nums">{d.completed}</td>
               <td className="text-right tabular-nums">{d.pending}</td>
@@ -774,9 +789,9 @@ export function DepartmentsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="All">All departments</SelectItem>
-              {departmentStats.map((d) => (
-                <SelectItem key={d.name} value={d.name}>
-                  {d.name}
+              {filterDepartments.map((dept) => (
+                <SelectItem key={dept} value={dept}>
+                  {dept}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -1532,7 +1547,7 @@ export function ReportsPage() {
     {
       name: "Department performance",
       description: "Active, completed and delayed work by department",
-      data: departmentStats,
+      data: buildDepartmentOverview(w.jobs, w.workflows),
       filename: "department-performance",
     },
     {

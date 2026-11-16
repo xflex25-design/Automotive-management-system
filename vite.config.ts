@@ -16,6 +16,11 @@ export default defineConfig({
     chunkSizeWarningLimit: 2000,
   },
   server: {
+    host: "0.0.0.0",
+    port: 3000,
+    allowedHosts: true,
+    hmr: process.env["DISABLE_HMR"] !== "true",
+    watch: process.env["DISABLE_HMR"] === "true" ? null : {},
     proxy: {
       "/backend-api": {
         target: env["VITE_API_URL"] || "http://localhost:8080",

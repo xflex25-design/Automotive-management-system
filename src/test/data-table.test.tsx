@@ -9,8 +9,31 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { DataTable, EmptyState } from "@/components/workshop/shared";
-import { nextSortState, sortRecords, type SortState } from "@/lib/workshop";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { DataTable, EmptyState, Status, ToolbarSearch } from "@/components/workshop/shared";
+import {
+  filterVehicles,
+  getVehicleStatusCategory,
+  nextSortState,
+  sortRecords,
+  vehicleRegistrationStatuses,
+  type SortState,
+  type Vehicle,
+  type VehicleRegistrationStatusFilter,
+} from "@/lib/workshop";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -311,5 +334,306 @@ describe("DataTable loading skeleton and sorting headers", () => {
     const updatedThumbs = el.querySelectorAll(".job-photo-thumb");
     expect(updatedThumbs.length).toBe(1);
     expect(el.querySelector('button[aria-label="Remove photo cracked-headlight.png"]')).toBeNull();
+  });
+
+  it("filters vehicle registration table rows in real time by VIN, license plate, or owner name", () => {
+    const sample: Vehicle[] = [
+      {
+        id: "VR-1068",
+        plate: "BCA 4821",
+        make: "Toyota Hilux",
+        customer: "John Mwansa",
+        phone: "+260977000111",
+        email: "john@example.com",
+        received: "11 Nov 2026",
+        stage: 0,
+        department: "Unassigned",
+        foreman: "Foreman 01",
+        complaints: "Brake squeal",
+        damage: "None",
+        due: "",
+        progress: 0,
+        vin: "1HGBH41JXMN109186",
+      },
+      {
+        id: "VR-1067",
+        plate: "BAZ 7390",
+        make: "Ford Ranger",
+        customer: "Sarah Banda",
+        phone: "+260977000222",
+        email: "sarah@example.com",
+        received: "11 Nov 2026",
+        stage: 0,
+        department: "Unassigned",
+        foreman: "Foreman 01",
+        complaints: "Suspension check",
+        damage: "Scuff",
+        due: "",
+        progress: 0,
+        vin: "2T1BURHE0JC073215",
+      },
+    ];
+
+    function VehicleSearchableTable() {
+      const [query, setQuery] = useState("");
+      const visible = filterVehicles(sample, { query });
+      return (
+        <div>
+          <ToolbarSearch
+            ariaLabel="Search registered vehicles by VIN, license plate, or owner name"
+            placeholder="Search by VIN, license plate, or owner name..."
+            value={query}
+            onChange={setQuery}
+          />
+          <DataTable
+            headers={["Vehicle", "VIN", "License plate", "Owner"]}
+            empty={visible.length === 0}
+            emptyState={
+              <EmptyState title="No matching vehicles" description="Try another query." />
+            }
+          >
+            {visible.map((v) => (
+              <tr key={v.id}>
+                <td>{v.make}</td>
+                <td>{v.vin ?? "—"}</td>
+                <td>{v.plate}</td>
+                <td>{v.customer}</td>
+              </tr>
+            ))}
+          </DataTable>
+        </div>
+      );
+    }
+
+    const el = mount(<VehicleSearchableTable />);
+    expect(el.querySelectorAll("tbody tr")).toHaveLength(2);
+
+    const input = el.querySelector(
+      'input[aria-label="Search registered vehicles by VIN, license plate, or owner name"]',
+    ) as HTMLInputElement;
+    expect(input).not.toBeNull();
+
+    const setInputValue = (value: string) => {
+      const nativeSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      act(() => {
+        nativeSetter?.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    };
+
+    // Filter by VIN
+    setInputValue("109186");
+    expect(el.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(el.textContent).toContain("BCA 4821");
+    expect(el.textContent).not.toContain("BAZ 7390");
+
+    // Filter by license plate
+    setInputValue("baz 7390");
+    expect(el.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(el.textContent).toContain("Sarah Banda");
+    expect(el.textContent).not.toContain("John Mwansa");
+
+    // Filter by owner name
+    setInputValue("John");
+    expect(el.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(el.textContent).toContain("1HGBH41JXMN109186");
+
+    // No matches shows empty state, clear restores all
+    setInputValue("NOMATCH999");
+    expect(el.querySelectorAll("tbody tr")).toHaveLength(0);
+    expect(el.textContent).toContain("No matching vehicles");
+
+    const clearBtn = el.querySelector('button[aria-label="Clear filter"]') as HTMLButtonElement;
+    act(() => {
+      clearBtn.click();
+    });
+    expect(el.querySelectorAll("tbody tr")).toHaveLength(2);
+  });
+
+  it("filters vehicle registration rows by status dropdown and selects vehicles inside a Dialog", () => {
+    if (!HTMLElement.prototype.hasPointerCapture) {
+      HTMLElement.prototype.hasPointerCapture = () => false;
+    }
+    if (!HTMLElement.prototype.releasePointerCapture) {
+      HTMLElement.prototype.releasePointerCapture = () => undefined;
+    }
+    if (!HTMLElement.prototype.scrollIntoView) {
+      HTMLElement.prototype.scrollIntoView = () => undefined;
+    }
+
+    const vehicles: Vehicle[] = [
+      {
+        id: "VR-1",
+        plate: "ACT 100",
+        make: "Toyota Hilux",
+        customer: "Alice Mbewe",
+        phone: "+260977000111",
+        email: "",
+        received: "11 Nov 2026",
+        stage: 1,
+        department: "Unassigned",
+        foreman: "Foreman 01",
+        complaints: "Checkup",
+        damage: "None",
+        due: "",
+        progress: 10,
+      },
+      {
+        id: "VR-2",
+        plate: "REP 200",
+        make: "Ford Ranger",
+        customer: "Bob Tembo",
+        phone: "+260977000222",
+        email: "",
+        received: "11 Nov 2026",
+        stage: 6,
+        department: "Mechanical",
+        foreman: "Foreman 01",
+        complaints: "Brakes",
+        damage: "Dent",
+        due: "",
+        progress: 50,
+      },
+      {
+        id: "VR-3",
+        plate: "DEL 300",
+        make: "Isuzu D-Max",
+        customer: "Carol Zulu",
+        phone: "+260977000333",
+        email: "",
+        received: "11 Nov 2026",
+        stage: 11,
+        department: "Fitting",
+        foreman: "Foreman 01",
+        complaints: "Service",
+        damage: "None",
+        due: "",
+        progress: 100,
+        released: true,
+      },
+    ];
+
+    function StatusFilterAndDialogSelectHarness() {
+      const [statusFilter, setStatusFilter] = useState<VehicleRegistrationStatusFilter>("All");
+      const [dialogOpen, setDialogOpen] = useState(false);
+      const [selectedVehicleId, setSelectedVehicleId] = useState("");
+      const visible = filterVehicles(vehicles, { status: statusFilter });
+
+      return (
+        <div>
+          <Select
+            value={statusFilter}
+            onValueChange={(value) => setStatusFilter(value as VehicleRegistrationStatusFilter)}
+          >
+            <SelectTrigger aria-label="Filter vehicle status">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {vehicleRegistrationStatuses.map((status) => (
+                <SelectItem key={status} value={status}>
+                  {status === "All" ? "All statuses" : status}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <button type="button" onClick={() => setDialogOpen(true)}>
+            Open dialog
+          </button>
+          <DataTable headers={["Plate", "Status"]} empty={visible.length === 0}>
+            {visible.map((v) => (
+              <tr key={v.id}>
+                <td>{v.plate}</td>
+                <td>
+                  <Status>{getVehicleStatusCategory(v)}</Status>
+                </td>
+              </tr>
+            ))}
+          </DataTable>
+
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>New job card</DialogTitle>
+                <DialogDescription>Select vehicle test</DialogDescription>
+              </DialogHeader>
+              <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId}>
+                <SelectTrigger aria-label="Vehicle">
+                  <SelectValue placeholder="Select a vehicle" />
+                </SelectTrigger>
+                <SelectContent>
+                  {vehicles.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>
+                      {v.make} · {v.plate}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div data-testid="selected-vehicle-id">{selectedVehicleId}</div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      );
+    }
+
+    const openRadixSelect = (trigger: HTMLElement) => {
+      act(() => {
+        trigger.focus();
+        trigger.dispatchEvent(
+          new MouseEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }),
+        );
+        trigger.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+        );
+      });
+    };
+
+    const el = mount(<StatusFilterAndDialogSelectHarness />);
+    expect(el.querySelectorAll("tbody tr")).toHaveLength(3);
+
+    const statusTrigger = el.querySelector(
+      'button[aria-label="Filter vehicle status"]',
+    ) as HTMLButtonElement;
+    openRadixSelect(statusTrigger);
+
+    const deliveredOpt = Array.from(document.body.querySelectorAll('[role="option"]')).find((opt) =>
+      opt.textContent?.includes("Delivered"),
+    ) as HTMLElement | undefined;
+    expect(deliveredOpt).toBeDefined();
+    act(() => {
+      deliveredOpt?.click();
+    });
+
+    expect(el.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(el.textContent).toContain("DEL 300");
+    expect(el.textContent).not.toContain("ACT 100");
+
+    const openDialogBtn = Array.from(el.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Open dialog"),
+    ) as HTMLButtonElement;
+    act(() => {
+      openDialogBtn.click();
+    });
+
+    const dialogVehicleTrigger = document.body.querySelector(
+      'button[aria-label="Vehicle"]',
+    ) as HTMLButtonElement;
+    expect(dialogVehicleTrigger).not.toBeNull();
+    openRadixSelect(dialogVehicleTrigger);
+
+    const vehicleOption = Array.from(document.body.querySelectorAll('[role="option"]')).find(
+      (opt) => opt.textContent?.includes("REP 200"),
+    ) as HTMLElement | undefined;
+    expect(vehicleOption).toBeDefined();
+    act(() => {
+      vehicleOption?.click();
+    });
+
+    expect(document.body.querySelector('[data-testid="selected-vehicle-id"]')?.textContent).toBe(
+      "VR-2",
+    );
+    expect(dialogVehicleTrigger.textContent).toContain("Ford Ranger · REP 200");
   });
 });

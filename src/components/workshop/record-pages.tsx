@@ -57,6 +57,7 @@ import {
   ExportButton,
 } from "./shared";
 import { VehicleDetail } from "./vehicle-detail";
+import { JobCardDetailDialog } from "./job-card-detail";
 import { cn } from "@/lib/utils";
 
 const QUOTATION_VAT_RATE = 16;
@@ -222,6 +223,7 @@ import {
   departments,
   canCreateInventory,
   canDecideParts,
+  createJobCardAuditEntry,
   nextSortState,
   sortRecords,
   type SortState,
@@ -408,6 +410,7 @@ export function RecordsPage({ kind }: { kind: RecordKind }) {
   }, [kind]);
   const [paperInventory, setPaperInventory] = useState<PaperInventoryRecord[]>([]);
   const [detail, setDetail] = useState<string | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [request, setRequest] = useState<Requisition | null>(null);
   const [selectedInspection, setSelectedInspection] = useState<Inspection | null>(null);
   const [quote, setQuote] = useState<Quotation | null>(null);
@@ -814,92 +817,7 @@ export function RecordsPage({ kind }: { kind: RecordKind }) {
                   size="icon"
                   title="Job card details"
                   aria-label={`View ${j.id}`}
-                  onClick={() =>
-                    setRecordDetail({
-                      title: `Job Card ${j.id}`,
-                      body: (
-                        <div className="space-y-4">
-                          <VehicleCell vehicle={w.vehicleFor(j.vehicleId)} />
-                          <div className="grid grid-cols-2 gap-3 text-xs bg-muted/30 p-3 rounded-lg border border-border/50">
-                            <div>
-                              <span className="text-muted-foreground block text-[11px] font-semibold uppercase tracking-wider">
-                                Department
-                              </span>
-                              <span className="font-medium text-foreground">
-                                {j.department || "Workshop"}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground block text-[11px] font-semibold uppercase tracking-wider">
-                                Target Due Date
-                              </span>
-                              <span className="font-medium text-foreground">
-                                {j.due || "To be confirmed"}
-                              </span>
-                            </div>
-                            {j.preparedBy && (
-                              <div>
-                                <span className="text-muted-foreground block text-[11px] font-semibold uppercase tracking-wider">
-                                  Prepared By
-                                </span>
-                                <span className="font-medium text-foreground">{j.preparedBy}</span>
-                              </div>
-                            )}
-                            <div>
-                              <span className="text-muted-foreground block text-[11px] font-semibold uppercase tracking-wider">
-                                Status
-                              </span>
-                              <div className="mt-1">
-                                <Status>{j.status}</Status>
-                              </div>
-                            </div>
-                          </div>
-                          <div>
-                            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                              Work Instructions
-                            </h4>
-                            <p className="text-sm text-foreground bg-background p-3 rounded border border-border/40 whitespace-pre-wrap">
-                              {j.work}
-                            </p>
-                          </div>
-                          {j.remarks && (
-                            <div>
-                              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                                Foreman Remarks
-                              </h4>
-                              <p className="text-sm text-foreground bg-muted/20 p-3 rounded border border-border/40 italic">
-                                {j.remarks}
-                              </p>
-                            </div>
-                          )}
-                          {j.photos && j.photos.length > 0 && (
-                            <div>
-                              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                                Damaged Vehicle Photographs ({j.photos.length})
-                              </h4>
-                              <div className="uploaded-photos">
-                                {j.photos.map((url, i) => (
-                                  <a
-                                    key={i}
-                                    href={url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="block overflow-hidden rounded border border-border hover:border-primary transition-colors"
-                                  >
-                                    <img
-                                      src={url}
-                                      alt={`Damaged vehicle condition ${i + 1}`}
-                                      className="w-20 h-16 object-cover"
-                                    />
-                                  </a>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ),
-                    })
-                  }
+                  onClick={() => setSelectedJobId(j.id)}
                 >
                   <ArrowUpRight />
                 </Button>
@@ -1010,7 +928,9 @@ export function RecordsPage({ kind }: { kind: RecordKind }) {
           onSave={(fields) => {
             const id = `INV-${Date.now()}`;
             const vehicle = w.vehicles.find(
-              (item) => item.plate.toLowerCase() === fields.registrationNo.trim().toLowerCase(),
+              (item) =>
+                item.id === fields.jobNo.trim() ||
+                item.plate.toLowerCase() === fields.registrationNo.trim().toLowerCase(),
             );
             const items = fields.accessories
               .filter((item) => item.present === "Present")
@@ -1034,6 +954,7 @@ export function RecordsPage({ kind }: { kind: RecordKind }) {
         <CreateRecord kind={kind} open={create} onClose={() => setCreate(false)} />
       )}
       <VehicleDetail id={detail} onClose={() => setDetail(null)} />
+      <JobCardDetailDialog jobId={selectedJobId} onClose={() => setSelectedJobId(null)} />
       <RequestDetail request={request} onClose={() => setRequest(null)} allowDecision={false} />
       <InspectionDetail
         inspection={selectedInspection}
@@ -1243,9 +1164,17 @@ function NewVehicleInventory({
   onClose: () => void;
   onSave: (fields: PaperInventoryFields) => void;
 }) {
+  const w = useWorkspace();
+  const [selectedVehicleId, setSelectedVehicleId] = useState("");
   const [fields, setFields] = useState(newPaperInventoryFields);
   const [accessorySort, setAccessorySort] =
     useState<SortState<"name" | "present" | "quantity">>(null);
+  const activeVehicles = w.vehicles.filter((v) => !v.released);
+  useEffect(() => {
+    if (open) {
+      setSelectedVehicleId("");
+    }
+  }, [open]);
   const setField = <K extends keyof PaperInventoryFields>(key: K, value: PaperInventoryFields[K]) =>
     setFields((current) => ({ ...current, [key]: value }));
   const sortedAccessories = sortRecords(fields.accessories, accessorySort, (item, key) => {
@@ -1335,6 +1264,45 @@ function NewVehicleInventory({
           <section className="registration-section-box">
             <div className="registration-section-title">Vehicle &amp; Customer Details</div>
             <div className="grid gap-4 p-5 md:grid-cols-2">
+              <div className="registration-row-compact md:col-span-2">
+                <span className="registration-label">Registered Vehicle</span>
+                <Select
+                  value={selectedVehicleId}
+                  onValueChange={(nextId) => {
+                    setSelectedVehicleId(nextId);
+                    const selected = activeVehicles.find((v) => v.id === nextId);
+                    if (!selected) return;
+                    setFields((current) => ({
+                      ...current,
+                      jobNo: selected.id,
+                      registrationNo: selected.plate,
+                      make: selected.make,
+                      ownedBy: selected.customer,
+                    }));
+                  }}
+                >
+                  <SelectTrigger
+                    aria-label="Vehicle"
+                    className="registration-select-trigger w-full min-w-0"
+                  >
+                    <SelectValue placeholder="Select a vehicle" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeVehicles.length === 0 ? (
+                      <SelectItem value="__none" disabled>
+                        No active registered vehicles
+                      </SelectItem>
+                    ) : (
+                      activeVehicles.map((v) => (
+                        <SelectItem key={v.id} value={v.id}>
+                          {v.make} · {v.plate}
+                          {v.customer ? ` · ${v.customer}` : ""}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
               {renderText("JOB No.", fields.jobNo, (value) => setField("jobNo", value))}
               {renderText("Registration No.", fields.registrationNo, (value) =>
                 setField("registrationNo", value),
@@ -1752,12 +1720,17 @@ function CreateRecord({
     };
   }, [kind, open]);
   useEffect(() => {
+    if (open) {
+      setVehicleId("");
+      setCatalogPartId("");
+    }
+  }, [kind, open]);
+  useEffect(() => {
     if (open && kind === "quotations") {
       setQuotationLines(initialQuotationLines());
       setLineSort(null);
       setPaperFields(initialPaperFields());
       editedPaperFields.current = new Set();
-      setVehicleId("");
     }
   }, [kind, open]);
   useEffect(() => {
@@ -1851,6 +1824,11 @@ function CreateRecord({
               ? v.stage >= 5
               : true),
   );
+  const eligibleIds = new Set(eligible.map((v) => v.id));
+  const selectableVehicles = [
+    ...eligible,
+    ...w.vehicles.filter((v) => !v.released && !eligibleIds.has(v.id)),
+  ];
   const quoteSubtotal = roundMoney(
     quotationLines.reduce(
       (sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0),
@@ -1897,9 +1875,9 @@ function CreateRecord({
   };
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const v = eligible.find((v) => v.id === vehicleId);
+    const v = selectableVehicles.find((v) => v.id === vehicleId);
     if (!v) {
-      toast.error("Select an eligible vehicle.");
+      toast.error("Select a vehicle.");
       return;
     }
     const f = new FormData(e.currentTarget);
@@ -2000,6 +1978,17 @@ function CreateRecord({
         preparedBy: preparedByName || "",
         ...(preparedByEmpId ? { preparedByEmployeeId: preparedByEmpId } : {}),
         photos: newJobPhotos.length > 0 ? newJobPhotos : [],
+        auditTrail: [
+          createJobCardAuditEntry({
+            type: "created",
+            actor: preparedByName || w.foreman,
+            actorRole: w.role,
+            summary: `Job card ${id} created for ${finalDepartment}`,
+            newStatus: "Pending",
+            department: finalDepartment,
+            ...(jobRemarksText ? { note: jobRemarksText } : {}),
+          }),
+        ],
       };
 
       w.setJobs((prev) => [newJob, ...prev]);
@@ -2080,8 +2069,6 @@ function CreateRecord({
       }}
     >
       <DialogContent
-       
-
         className={
           kind === "quotations"
             ? "modal-scroll max-w-6xl sm:max-w-6xl"
@@ -2209,7 +2196,9 @@ function CreateRecord({
                       value={vehicleId}
                       onValueChange={(nextId) => {
                         setVehicleId(nextId);
-                        const selected = eligible.find((vehicle) => vehicle.id === nextId);
+                        const selected = selectableVehicles.find(
+                          (vehicle) => vehicle.id === nextId,
+                        );
                         if (!selected) return;
                         fillFromVehicle("billTo1", selected.customer);
                         fillFromVehicle("shipTo1", selected.customer);
@@ -2219,16 +2208,22 @@ function CreateRecord({
                     >
                       <SelectTrigger
                         aria-label="Registered vehicle"
-                        className="registration-select-trigger"
+                        className="registration-select-trigger w-full min-w-0"
                       >
                         <SelectValue placeholder="Select a registered vehicle" />
                       </SelectTrigger>
                       <SelectContent>
-                        {eligible.map((vehicle) => (
-                          <SelectItem key={vehicle.id} value={vehicle.id}>
-                            {vehicle.make} · {vehicle.plate} · {vehicle.customer}
+                        {selectableVehicles.length === 0 ? (
+                          <SelectItem value="__none" disabled>
+                            No active registered vehicles
                           </SelectItem>
-                        ))}
+                        ) : (
+                          selectableVehicles.map((vehicle) => (
+                            <SelectItem key={vehicle.id} value={vehicle.id}>
+                              {vehicle.make} · {vehicle.plate} · {vehicle.customer}
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -2245,9 +2240,9 @@ function CreateRecord({
                         Retry
                       </Button>
                     </p>
-                  ) : eligible.length === 0 ? (
+                  ) : selectableVehicles.length === 0 ? (
                     <p className="text-xs text-muted-foreground">
-                      No eligible registered vehicles are available.
+                      No active registered vehicles are available.
                     </p>
                   ) : null}
                   {(
@@ -2300,7 +2295,9 @@ function CreateRecord({
                       </TableHead>
                       <TableHead
                         sortDirection={lineSort?.key === "description" ? lineSort.direction : null}
-                        onSort={() => setLineSort((current) => nextSortState(current, "description"))}
+                        onSort={() =>
+                          setLineSort((current) => nextSortState(current, "description"))
+                        }
                       >
                         Description
                       </TableHead>
@@ -2540,28 +2537,38 @@ function CreateRecord({
                   Vehicle <span className="registration-required">*</span>
                 </span>
                 <Select value={vehicleId} onValueChange={setVehicleId}>
-                  <SelectTrigger aria-label="Vehicle" className="registration-select-trigger">
+                  <SelectTrigger
+                    aria-label="Vehicle"
+                    className="registration-select-trigger w-full min-w-0"
+                  >
                     <SelectValue placeholder="Select a vehicle" />
                   </SelectTrigger>
                   <SelectContent>
-                    {eligible.map((v) => (
-                      <SelectItem key={v.id} value={v.id}>
-                        {v.make} · {v.plate}
+                    {selectableVehicles.length === 0 ? (
+                      <SelectItem value="__none" disabled>
+                        No active registered vehicles
                       </SelectItem>
-                    ))}
+                    ) : (
+                      selectableVehicles.map((v) => (
+                        <SelectItem key={v.id} value={v.id}>
+                          {v.make} · {v.plate}
+                          {v.customer ? ` · ${v.customer}` : ""}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
-              {eligible.length === 0 && (
+              {selectableVehicles.length === 0 ? (
                 <p className="text-xs font-medium text-muted-foreground">
-                  {kind === "inventory"
-                    ? "No vehicles with customer-approved quotations are awaiting an inventory card."
-                    : kind === "jobs"
-                      ? "No vehicles with inventory cards are awaiting a job card."
-                      : kind === "inspections"
-                        ? "No vehicles are currently awaiting inspection."
-                        : "No eligible vehicle records are available."}
+                  No active registered vehicles are available. Register a vehicle first.
                 </p>
+              ) : (
+                eligible.length === 0 && (
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Showing all active registered vehicles.
+                  </p>
+                )
               )}
               {kind === "inventory" ? (
                 <p className="text-xs font-medium text-muted-foreground">

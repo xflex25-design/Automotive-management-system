@@ -79,6 +79,7 @@ export function Status({ children: value }: { children: string | undefined }) {
     "approved",
     "complete",
     "completed",
+    "delivered",
     "passed",
     "released",
     "confirmed",

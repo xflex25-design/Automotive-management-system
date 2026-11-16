@@ -40,6 +40,10 @@ export function VehicleDetail({ id, onClose }: { id: string | null; onClose: () 
                 <dd>{vehicle.phone}</dd>
               </div>
               <div>
+                <dt>VIN</dt>
+                <dd className="font-mono text-xs">{vehicle.vin || "—"}</dd>
+              </div>
+              <div>
                 <dt>Current stage</dt>
                 <dd>
                   <Status>{vehicle.released ? "Released" : stageName(vehicle.stage)}</Status>
