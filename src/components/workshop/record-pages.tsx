@@ -2081,6 +2081,7 @@ function CreateRecord({
     >
       <DialogContent
        
+
         className={
           kind === "quotations"
             ? "modal-scroll max-w-6xl sm:max-w-6xl"
@@ -3156,43 +3157,43 @@ function RequestDetail({
         </DialogHeader>
 
         <div className="space-y-4 text-sm">
-          <div
-              <p>
-                <Status>{request.status}</Status>
-              </p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Department</span>
-              <p>{request.department}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground">Foreman</span>
-              <p>{request.foreman}</p>
-            </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground">Status</span>
+            <p>
+              <Status>{request.status}</Status>
+            </p>
           </div>
-
           <div>
-            <span className="text-muted-foreground">Reason</span>
-            <p className="rounded-md border bg-muted/20 p-3 leading-relaxed">{request.reason}</p>
+            <span className="text-muted-foreground">Department</span>
+            <p>{request.department}</p>
           </div>
-
-          {request.decisionNote && (
-            <div>
-              <span className="text-muted-foreground">Decision note</span>
-              <p className="rounded-md border bg-muted/20 p-3 leading-relaxed">
-                {request.decisionNote}
-              </p>
-            </div>
-          )}
-
-          {allowDecision && (
-            <div className="flex justify-end gap-2">
-              <Button size="sm" variant="outline" onClick={onClose}>
-                Close
-              </Button>
-            </div>
-          )}
+          <div>
+            <span className="text-muted-foreground">Foreman</span>
+            <p>{request.foreman}</p>
+          </div>
         </div>
+
+        <div>
+          <span className="text-muted-foreground">Reason</span>
+          <p className="rounded-md border bg-muted/20 p-3 leading-relaxed">{request.reason}</p>
+        </div>
+
+        {request.decisionNote && (
+          <div>
+            <span className="text-muted-foreground">Decision note</span>
+            <p className="rounded-md border bg-muted/20 p-3 leading-relaxed">
+              {request.decisionNote}
+            </p>
+          </div>
+        )}
+
+        {allowDecision && (
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="outline" onClick={onClose}>
+              Close
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
